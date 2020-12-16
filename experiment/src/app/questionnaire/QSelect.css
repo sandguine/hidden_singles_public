@@ -1,0 +1,15 @@
+.radio-container {
+    position: relative;
+    text-align: left;
+    padding-bottom: 1em;
+    line-height: 1.4em;
+}
+
+.radio {
+    /*position: relative;*/
+    /*transform: translate(0%, 33%);*/
+}
+
+.label-container {
+    padding-left: .5em;
+}

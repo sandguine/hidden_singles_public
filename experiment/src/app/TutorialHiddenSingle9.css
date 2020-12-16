@@ -1,0 +1,11 @@
+.task {
+    padding-top: 10px;
+    display: flex;
+    width: 450px;
+    margin: 0 auto;
+}
+
+.grid-house {
+    margin: 12px;
+    display: inline-grid;
+}

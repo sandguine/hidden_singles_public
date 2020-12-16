@@ -1,0 +1,82 @@
+.SudokuExperiment {
+    text-align: center;
+    max-height: 720px;
+    width: 650px;
+    background: lightyellow;
+    margin: 50px auto;
+    position: relative;
+    padding: 25px;
+}
+
+.header {
+    /*background: #D4C8FA;*/
+    height: 35px;
+    position: relative;
+    /*text-align: initial;*/
+}
+
+.footer {
+    /*background: lightpink;*/
+    padding-top: 10px;
+    height: 35px;
+    position: relative;
+    text-align: initial;
+}
+
+.compensation {
+    /*text-align: left;*/
+    /*padding-top: 5px;*/
+    /*padding-left: 10px;*/
+}
+
+.left-container {
+    float: left;
+    padding: 0;
+}
+
+.right-container {
+    float: right;
+    padding: 0;
+}
+
+.timer-container {
+    min-width: 100px;
+}
+
+.hint-container {
+    padding-left: 10px;
+}
+
+.back-container {
+    padding-right: 10px;
+}
+
+.skip-container {
+    padding-right: 10px;
+}
+
+.title-container {
+    font-weight: bolder;
+    font-size: x-large;
+    padding: 0;
+}
+
+.screen {
+    position: relative;
+    max-height: 620px;
+    width: 600px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    /*background: aliceblue;*/
+}
+
+.next_button {
+    right:    0px;
+    bottom:   0px;
+    position: absolute;
+}
+
+.screen-label {
+    bottom:   0px;
+    position: absolute;
+}

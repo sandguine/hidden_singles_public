@@ -1,0 +1,24 @@
+.task {
+    padding-top: 10px;
+    display: flex;
+    width: 450px;
+    margin: 0 auto;
+}
+
+.question {
+    margin: auto;
+    text-align: center;
+}
+
+response {
+    margin: auto;
+}
+
+input {
+    text-align: right;
+}
+
+.grid-house {
+    margin: 12px;
+    display: inline-grid;
+}
