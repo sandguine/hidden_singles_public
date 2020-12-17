@@ -3,6 +3,12 @@ import numpy as np
 import random
 import jsonpickle
 import json
+import os
+
+
+def mkdir(dirname):
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
 
 
 # String misc

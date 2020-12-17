@@ -2,6 +2,7 @@
 **/.DS_Store
 experiment/node_modules
 **/.idea
+data/raw
 
 
 # Byte-compiled / optimized / DLL files
