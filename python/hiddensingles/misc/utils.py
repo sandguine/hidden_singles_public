@@ -4,11 +4,26 @@ import random
 import jsonpickle
 import json
 import os
+import hashlib
 
 
 def mkdir(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
+
+
+def short_hash(strings: list, hash_length: int):
+    """
+    Creates a short hash for a list of strings of a specified length.
+    Raises an error if collisions are found.
+    :param strings: list of strings
+    :param hash_length: int
+    :return:
+    """
+    hashes = [hashlib.sha1(s.encode("UTF-8")).hexdigest()[:hash_length] for s in strings]
+    if len(set(hashes)) < len(strings):
+        raise Exception("Hash collisions found. Increase hash length.")
+    return hashes
 
 
 # String misc

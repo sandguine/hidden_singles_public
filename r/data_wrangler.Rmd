@@ -1,0 +1,118 @@
+---
+title: "manuscript"
+author: "Andrew"
+date: "12/17/2020"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 4
+    theme: cosmo
+    highlight: tango
+    pandoc_args: ["--number-offset=2"]
+---
+
+This file should be run after running ~/python/scripts/Data Wrangler.ipynb.
+It completes the remainder of data wrangling by adding statistical measure columns.
+
+```{r setup, include=FALSE}
+# these options here change the formatting of how comments are rendered
+knitr::opts_chunk$set(collapse = TRUE,
+                      comment = "#>",
+                      results = "hold",
+                      fig.show = "hold")
+
+# Clear any existing variables
+rm(list = ls())
+```
+
+```{r libraries, message=FALSE}
+library(tidyverse)
+library(glue)
+library(lme4)
+```
+
+
+# Load data
+
+```{r}
+subject_data = read_tsv("../data/processed/subject_data.tsv")
+puzzle_data = read_tsv("../data/processed/puzzle_data.tsv")
+```
+
+# Last trial accuracy
+
+```{r}
+df = puzzle_data %>% 
+  mutate(ltrial = log2(trial))
+
+sigmoid = function(x) {
+  return (1 / (1 + exp(-x)))
+}
+
+p1_last_acc = glmer(correct ~ ltrial + (ltrial | subject_id),
+              family = "binomial",
+              data = df %>% filter(phase == 1)) %>%
+  broom.mixed::augment() %>% 
+  group_by(subject_id) %>% 
+  filter(ltrial == max(ltrial)) %>%
+  mutate(p1_last_acc = sigmoid(.fitted)) %>% 
+  select(subject_id, p1_last_acc)
+
+p2_last_acc = glmer(correct ~ ltrial + (ltrial | subject_id),
+              family = "binomial",
+              data = df %>% filter(phase == 2)) %>%
+  broom.mixed::augment() %>% 
+  group_by(subject_id) %>% 
+  filter(ltrial == max(ltrial)) %>%
+  mutate(p2_last_acc = sigmoid(.fitted)) %>% 
+  select(subject_id, p2_last_acc)
+```
+
+# Overall accuracy
+```{r}
+accuracy = puzzle_data %>% 
+  group_by(subject_id, phase) %>% 
+  summarize(accuracy = mean(correct)) %>% 
+  pivot_wider(id_cols = subject_id,
+              names_from = phase,
+              names_glue = "p{phase}_{.value}",
+              values_from = accuracy)
+```
+
+# Non-modal digit responses
+```{r}
+p2_non_md = puzzle_data %>% 
+  filter(phase == 2,
+         response_type != 'target',
+         response_type != 'distractor') %>% 
+  group_by(subject_id) %>% 
+  summarize(p2_non_md = n())
+```
+
+# Solved in last 8 trials of phase 2
+```{r}
+p2_last_8_solved = puzzle_data %>% 
+  filter(phase == 2,
+         trial > 56) %>% 
+  group_by(subject_id) %>% 
+  summarize(p2_last_8_solved = sum(correct))
+```
+
+# Save dataframe
+```{r}
+solver_boundary = .8 
+
+subject_data %>% 
+  merge(accuracy, all.x = T) %>% 
+  merge(p1_last_acc, all.x = T) %>% 
+  merge(p2_last_acc, all.x = T) %>% 
+  merge(p2_non_md, all.x = T) %>% 
+  merge(p2_last_8_solved, all.x = T) %>% 
+  arrange(desc(p1_last_acc), desc(p2_accuracy), desc(subject_id)) %>% 
+  mutate(subject_id = 1:nrow(subject_data),
+         solver = p1_last_acc >= solver_boundary,
+         excluded = is.na(tut_house)) %>% 
+  select(subject_id, sid_hash, excluded, solver, p1_accuracy, p2_accuracy,
+         p1_last_acc, p2_last_acc, p2_non_md, p2_last_8_solved, everything()) %>% 
+  write_tsv("../data/processed/subject_data.tsv")
+```
