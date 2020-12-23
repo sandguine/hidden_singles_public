@@ -98,23 +98,42 @@ p2_last_8_solved = puzzle_data %>%
   summarize(p2_last_8_solved = sum(correct))
 ```
 
-# Save dataframe
+# Combine data and save
+
 ```{r}
 solver_boundary = .8 
 
-subject_data %>% 
+subject_data = subject_data %>% 
   merge(accuracy, all.x = T) %>% 
   merge(p1_last_acc, all.x = T) %>% 
   merge(p2_last_acc, all.x = T) %>% 
   merge(p2_non_md, all.x = T) %>% 
   merge(p2_last_8_solved, all.x = T) %>% 
   arrange(desc(p1_last_acc), desc(p2_accuracy), sid_hash) %>% 
-  mutate(subject_id = 1:nrow(subject_data),
+  mutate(subject_id_old = subject_id, # remap based on p1_last_acc
+         subject_id = 1:nrow(subject_data),
          solver = p1_last_acc >= solver_boundary,
          excluded = is.na(tut_house),
          p2_non_md = replace_na(p2_non_md, 0),
-         p2_last_8_solved = replace_na(p2_last_8_solved, 0)) %>% 
+         p2_last_8_solved = replace_na(p2_last_8_solved, 0))
+
+sid_map = subject_data %>% 
+  select(subject_id_old, subject_id)
+
+subject_data = subject_data %>% 
+  select(-subject_id_old) %>% 
   select(subject_id, sid_hash, excluded, solver, p1_accuracy, p2_accuracy,
-         p1_last_acc, p2_last_acc, p2_non_md, p2_last_8_solved, everything()) %>% 
-  write_tsv("../data/processed/subject_data.tsv")
+         p1_last_acc, p2_last_acc, p2_non_md, p2_last_8_solved, everything())
+
+puzzle_data = puzzle_data %>% 
+  rename(subject_id_old = subject_id) %>% # remap based on p1_last_acc
+  merge(sid_map) %>% 
+  select(-subject_id_old) %>% 
+  select(subject_id, everything()) %>% 
+  arrange(subject_id, phase, trial)
+```
+
+```{r}
+write_tsv(subject_data, "../data/processed/subject_data.tsv")
+write_tsv(puzzle_data, "../data/processed/puzzle_data.tsv")
 ```
