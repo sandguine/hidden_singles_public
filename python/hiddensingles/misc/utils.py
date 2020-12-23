@@ -5,11 +5,57 @@ import jsonpickle
 import json
 import os
 import hashlib
+import torch
+import pandas as pd
+import itertools
+from collections.abc import Iterable
+
+
+def kv_str(_delim=" | ", **kwargs):
+    s = []
+    for k, v in kwargs.items():
+        if isinstance(v, torch.Tensor):
+            if len(v.shape) == 0:
+                v = v.item()
+            else:
+                v = v.detach().cpu()
+        if isinstance(v, float):
+            v = round(v, 3)
+        s.append("{}: {}".format(k, v))
+    s = _delim.join(s)
+    return s
+
+
+def kv_print(_delim=" | ", **kwargs):
+    """
+    Pretty-prints kwargs
+    """
+    print(kv_str(_delim, **kwargs))
 
 
 def mkdir(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
+
+
+def extract_args(args):
+    """
+    Use when *args is used as a function parameter.
+    Allows both an iterable and a sequence of parameters to be passed in.
+    For example, if f([1, 2, 3]) and f(1, 2, 3) will be valid inputs to the following function
+        def f(*args):
+            args = extract_args(args)
+            ...
+    @param args:
+    @return:
+    """
+    if len(args) == 1 and is_iterable(args[0]):
+        return args[0]
+    return args
+
+
+def is_iterable(obj):
+    return isinstance(obj, Iterable)
 
 
 def short_hash(strings: list, hash_length: int):
@@ -61,6 +107,44 @@ def as_dict(obj):
 
 def rotate(array, n):
     return array[n:] + array[:n]
+
+
+def lcs_from_start(sequences):
+    """
+    Finds the longest common subsequence from the beginning of each sequence
+    >>> lcs_from_start(['abcd', 'abcde', 'abcef'])
+    'abc'
+    >>> lcs_from_start(['abcd', 'bcd', 'abcdefg'])
+    ''
+    @param sequences:
+    @return:
+    """
+    lss = sequences[0]
+    for seq in sequences:
+        while lss != seq[:len(lss)]:
+            lss = lss[:-1]
+    return lss
+
+
+def to_dataframe(array, key_names, value_name):
+    """
+    Turns a multi-dimensional tensor or array into a long-format dataframe
+    array: tensor or array with shape [d1, ..., dk]
+    key_names: list of strings; must be same length as number of dimensions in array
+    value_name: string
+    """
+    assert len(key_names) == len(array.shape)
+
+    if isinstance(array, torch.Tensor):
+        array = array.detach().cpu().numpy()
+
+    df = pd.DataFrame(array.reshape(-1, array.shape[-1]))
+    keys = np.array(list(itertools.product(*[range(i) for i in array.shape[:-1]])))
+    for i in range(len(key_names) - 1):
+        key = key_names[i]
+        df[key] = keys[:, i]
+    df = df.melt(id_vars=key_names[:-1], var_name=key_names[-1], value_name=value_name)
+    return df
 
 
 class UniversalEncoder(json.JSONEncoder):

@@ -1,0 +1,89 @@
+---
+title: "Recurrent Relational Network"
+author: "Andrew"
+date: "12/17/2020"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 4
+    theme: cosmo
+    highlight: tango
+    pandoc_args: ["--number-offset=2"]
+---
+
+This file should be run after the 'Recurrent Relational Network.ipynb'.
+```{r setup, include=FALSE}
+# these options here change the formatting of how comments are rendered
+knitr::opts_chunk$set(collapse = TRUE,
+                      comment = "#>",
+                      results = "hold",
+                      fig.show = "hold")
+
+# Clear any existing variables
+rm(list = ls())
+```
+
+```{r libraries, message=FALSE}
+library(tidyverse)
+```
+
+```{r}
+# Set ggplot theme
+theme_set(theme_light() +
+            theme(plot.title = element_text(hjust = 0.5)))
+```
+
+# Load data
+
+```{r}
+train_results = read_tsv("../data/rrn/train_results.tsv") %>% 
+  pivot_longer(cols = c(loss, accuracy, probability),
+               names_to = 'measure',
+               values_to = 'value')
+test_results = read_tsv("../data/rrn/test_results.tsv")
+```
+
+# Training dynamics
+
+```{r}
+p = train_results %>% 
+  mutate(train_size = as.factor(train_size)) %>% 
+  filter(measure == 'accuracy') %>% 
+  ggplot(aes(x = epoch, y = value, color=train_size)) +
+  geom_line() +
+  labs(x = 'Epoch', y = 'Accuracy') +
+  guides(color = guide_legend(title="Training Set Size"))
+
+ggsave('../figures/rrn/train_results.png', plot = p, width = 8, height = 4.5)
+```
+
+```{r}
+p = test_results %>% 
+  filter(train_size == 500) %>% 
+  pivot_longer(c(house_type, house_index, cell_index, digit_set),
+               names_to='feature',
+               values_to='condition') %>% 
+  mutate(correct = as.numeric(correct),
+         feature = recode(feature,
+                          house_type = 'House Type',
+                          house_index = 'House Index',
+                          cell_index = 'Cell Index',
+                          digit_set = 'Digit Set'),
+         changed = ifelse(condition, 'Changed', 'Unchanged') %>% 
+           factor(levels = c('Unchanged', 'Changed'))) %>%
+  ggplot(aes(x = feature, y = correct, fill = changed)) +
+  stat_summary(orientation = "x",
+               fun = "mean",
+               geom = "bar",
+               size = 1.5,
+               position = position_dodge(.9)) +
+  stat_summary(fun.data = "mean_cl_boot",
+               orientation = "x",
+               geom = "linerange",
+               position = position_dodge(.9)) +
+  labs(x = "Feature",
+       y = "Accuracy") +
+  guides(fill = guide_legend(title="Changed"))
+
+ggsave('../figures/rrn/test_results.png', plot = p, width = 8, height = 4.5)
+```
