@@ -64,11 +64,12 @@ p = test_results %>%
                names_to='feature',
                values_to='condition') %>% 
   mutate(correct = as.numeric(correct),
-         feature = recode(feature,
-                          house_type = 'House Type',
-                          house_index = 'House Index',
-                          cell_index = 'Cell Index',
-                          digit_set = 'Digit Set'),
+         feature = recode_factor(feature,
+                                 digit_set = 'Digit Set',
+                                 house_index = 'House Index',
+                                 cell_index = 'Cell Index',
+                                 house_type = 'House Type',
+                                 .ordered = TRUE),
          changed = ifelse(condition, 'Changed', 'Unchanged') %>% 
            factor(levels = c('Unchanged', 'Changed'))) %>%
   ggplot(aes(x = feature, y = correct, fill = changed)) +
