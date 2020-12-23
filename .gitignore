@@ -3,6 +3,7 @@
 experiment/node_modules
 **/.idea
 data/raw
+r/cache/
 
 
 # Byte-compiled / optimized / DLL files
