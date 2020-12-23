@@ -1,0 +1,417 @@
+---
+title: "Hidden Markov Model"
+author: "Andrew"
+date: "12/17/2020"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 4
+    theme: cosmo
+    highlight: tango
+    pandoc_args: ["--number-offset=2"]
+---
+
+This file should be run after the 'Hidden Markov Model.ipynb'.
+
+```{r setup, include=FALSE}
+# these options here change the formatting of how comments are rendered
+knitr::opts_chunk$set(collapse = TRUE,
+                      comment = "#>",
+                      results = "hold",
+                      fig.show = "hold")
+
+# Clear any existing variables
+rm(list = ls())
+```
+
+```{r libraries, message=FALSE}
+library(tidyverse)
+library(scales)
+library(cowplot)
+library(glue)
+library(kSamples)
+```
+
+```{r}
+# Set ggplot theme
+theme_set(theme_light() +
+            theme(plot.title = element_text(hjust = 0.5)))
+
+colors = hue_pal()(4)
+colors = c(Target = colors[2],
+           Distractor = colors[1],
+           Absent = colors[3],
+           `In-House` = colors[4],
+           HS = colors[2],
+           MD = colors[1],
+           AC = colors[3],
+           UG = colors[4],
+           `Hidden Singles` = colors[2],
+           `Modal Digit` = colors[1],
+           `Avoid Constraints` = colors[3],
+           `Uniform Guess` = colors[4])
+```
+
+# Load data
+
+```{r}
+load_tsv = function(filename) {
+  df = read_tsv(glue("../data/hmm/solvers/{filename}.tsv")) %>% 
+    rbind(read_tsv(glue("../data/hmm/nonsolvers/{filename}.tsv")))
+  return (df)
+}
+
+df_puzzle = read_tsv("../data/processed/puzzle_data.tsv") %>% 
+  mutate(response_type = recode_factor(response_type,
+                                       `inhouse` = 'In-House',
+                                       `absent` = 'Absent',
+                                       `distractor` = 'Distractor',
+                                       `target` = 'Target'))
+df_subject = read_tsv("../data/processed/subject_data.tsv")
+df_p_responses = load_tsv("subject_p_responses") %>% 
+  mutate(subject_id = as.factor(subject_id),
+         trial = trial + 1,
+         response_type = recode_factor(response_type,
+                                       `0` = 'In-House',
+                                       `1` = 'Absent',
+                                       `2` = 'Distractor',
+                                       `3` = 'Target'))
+df_p_strategies = load_tsv("subject_p_strategies") %>% 
+  mutate(subject_id = as.factor(subject_id),
+         trial = trial + 1,
+         strategy = recode_factor(strategy,
+                                  `0` = 'Uniform Guess',
+                                  `1` = 'Avoid Constraints',
+                                  `2` = 'Modal Digit',
+                                  `3` = 'Hidden Singles'))
+df_top_paths = load_tsv("top_paths") %>% 
+  mutate(subject_id = as.factor(subject_id),
+         trial = trial + 1,
+         strategy = recode_factor(strategy,
+                                  `0` = 'Uniform Guess',
+                                  `1` = 'Avoid Constraints',
+                                  `2` = 'Modal Digit',
+                                  `3` = 'Hidden Singles'))
+df_p_top_paths = load_tsv("top_paths_probs") %>% 
+  mutate(subject_id = as.factor(subject_id))
+df_nll_actual = load_tsv("nll_actual") %>% 
+  mutate(likelihood = exp(-nll))
+df_nll_sample = load_tsv("nll_sample") %>% 
+  mutate(likelihood = exp(-nll))
+```
+
+# Aggregate performance plot
+
+## Actual responses
+```{r}
+solver_ids = df_subject %>% 
+  filter(solver) %>% 
+  pull(subject_id)
+
+plot_responses = df_puzzle %>% 
+  filter(subject_id %in% solver_ids,
+         phase == 1,
+         response_type != 'Target') %>% 
+  group_by(trial, response_type) %>% 
+  summarize(count = n()) %>%
+  mutate(frequency = count / length(solver_ids)) %>% 
+  ggplot(aes(x = trial, y = frequency, fill = response_type)) +
+  scale_fill_manual(values = colors) +
+  geom_bar(stat = "identity") + 
+  coord_cartesian(y = c(0, 0.5)) +
+  labs(title = "Actual Responses",
+       x = "Trial",
+       y = "Frequency") +
+  guides(fill = guide_legend(title="Response Type")) +
+  theme(legend.position = "bottom")
+
+plot_responses
+```
+
+## P(responses)
+```{r}
+plot_p_responses = df_p_responses %>% 
+  filter(subject_id %in% solver_ids,
+         response_type != 'Target') %>% 
+  group_by(trial, response_type) %>% 
+  summarize(probability = mean(probability)) %>%
+  ggplot(aes(x = trial, y = probability, fill = response_type)) +
+  scale_fill_manual(values = colors) +
+  geom_bar(stat = "identity") + 
+  coord_cartesian(y = c(0, 0.5)) +
+  labs(title = "HMM Predicted Responses",
+       x = "Trial",
+       y = "P(Response)") +
+  guides(fill = guide_legend(title="Response Type")) +
+  theme(legend.position = "bottom")
+```
+
+## P(strategy)
+
+```{r}
+plot_p_strategies = df_p_strategies %>% 
+  filter(subject_id %in% solver_ids) %>% 
+  group_by(trial, strategy) %>% 
+  summarize(probability = mean(probability)) %>%
+  ggplot(aes(x = trial, y = probability, fill = strategy)) +
+  scale_fill_manual(values = colors) +
+  geom_bar(stat = "identity") + 
+  labs(title = "HMM Predicted Strategies",
+       x = "Trial",
+       y = "P(Strategy)") +
+  guides(fill = guide_legend(title="Strategy")) +
+  theme(legend.position = "bottom")
+```
+
+## Phase 1 trial of acquiring HS
+
+```{r}
+get_hs_acquired = function(p) {
+  df = df_p_strategies %>% 
+    filter(strategy == 'Hidden Singles',
+           probability >= p) %>% 
+    group_by(subject_id) %>% 
+    summarize(trial = min(trial)) %>% 
+    mutate(confidence = p)
+  return (df)
+}
+
+plot_hs_acquired = tibble(p = c(.5, .7, .9, .95)) %>% 
+  mutate(temp = map(.x = p,
+                    .f = ~get_hs_acquired(.x))) %>% 
+  unnest() %>% 
+  mutate(Confidence = as.factor(confidence)) %>% 
+  ggplot(aes(x = trial, color = Confidence)) +
+  geom_line(aes(y = ..y..),
+            stat = 'ecdf') +
+  geom_point(aes(y = ..y..),
+             stat = 'ecdf') +
+  xlim(1, 25) +
+  labs(title = 'P(Strategy) >= Confidence',
+       x = 'trial',
+       y = '% of Participants') +
+  theme(legend.position="bottom")
+
+plot_hs_acquired
+```
+
+All aggregate plots in one
+```{r}
+legend_ab = get_legend(plot_responses)
+legend_c = get_legend(plot_p_strategies)
+legend_d = get_legend(plot_hs_acquired)
+plot_a = plot_responses +
+  theme(legend.position = 'None')
+plot_b = plot_p_responses +
+  theme(legend.position = 'None')
+plot_c = plot_p_strategies +
+  theme(legend.position = 'None')
+plot_d = plot_hs_acquired +
+  theme(legend.position = 'None')
+
+plot_ab = ggdraw() +
+  draw_plot(plot_a, x = 0, y = 0, width = .5, height = 1) +
+  draw_plot(plot_b, x = .5, y = 0, width = .5, height = 1)
+
+plot_ab = ggdraw() +
+  draw_plot(plot_ab, x = 0, y = .08, width = 1, height = .92) +
+  draw_grob(legend_ab, 0, 0, 1, .08)
+
+plot_c = ggdraw() +
+  draw_plot(plot_c, x = 0, y = .08, width = 1, height = .92) +
+  draw_grob(legend_c, 0, 0, 1, .08)
+
+plot_d = ggdraw() +
+  draw_plot(plot_d, x = 0, y = .08, width = 1, height = .922) +
+  draw_grob(legend_d, 0, 0, 1, .08)
+
+p = ggdraw() +
+  draw_plot(plot_ab, x = 0, y = 0.5, width = 1, height = .5) + 
+  draw_plot(plot_c, x = 0, y = 0, width = .5, height = .5) +
+  draw_plot(plot_d, x = 0.5, y = 0, width = .5, height = .5) +
+  draw_plot_label(label = c("A", "B", "C", "D"),
+                  size = 13,
+                  x = c(0, .5, 0, 0.5), y = c(1, 1, .5, .5))
+
+ggsave(glue("../figures/practice_phase_aggregates/hmm_results.png"), plot=p, width=8, height=6)
+```
+
+# Likelihood CCDF
+```{r}
+p = ggplot() + 
+  geom_line(aes(x = likelihood, y = 1 - ..y.., color = model, linetype = "actual"),
+            data = df_nll_actual %>% 
+              filter(subject_id %in% solver_ids),
+            stat = 'ecdf') +
+  geom_line(aes(x = likelihood, y = 1 - ..y.., color = model, linetype = 'sample'),
+            data = df_nll_sample %>% 
+              filter(subject_id %in% solver_ids),
+            stat = 'ecdf') +
+  xlim(0, 1) +
+  labs(title = "Inverse CDF of Data Likelihoods",
+       y = '% of Data < Likelihood',
+       x = 'Likelihood') +
+  guides(color = guide_legend(title = "Model"),
+         linetype=guide_legend(title="Data"))
+
+ggsave(glue("../figures/practice_phase_aggregates/likelihood_ccdf.png"), plot=p, width=8, height=4.5)
+```
+
+# Anderson-Darling test
+```{r}
+num_sims = df_nll_actual %>% 
+  pull(sim) %>% 
+  unique() %>% 
+  length()
+
+get_pval = function(model_name, sim_id) {
+  a1 = df_nll_actual %>% 
+    filter(subject_id %in% solver_ids,
+           model == model_name,
+           sim == sim_id) %>% 
+    pull(likelihood)
+  a2 = df_nll_sample %>% 
+    filter(subject_id %in% solver_ids,
+           model == model_name,
+           sim == sim_id) %>% 
+    pull(likelihood)
+  test = ad.test(a1, a2)
+  pval = data.frame(test$ad) %>% 
+    head(1) %>% 
+    pull(X.asympt..P.value)
+  return (pval)
+}
+
+df = crossing(model_name = c('hmm', 'priors', 'means'),
+              sim_id = 0:(num_sims - 1)) %>% 
+  mutate(p = map2_dbl(.x = model_name,
+                      .y = sim_id,
+                      .f = ~get_pval(.x, .y)))
+```
+## P-values visualized
+```{r}
+df %>% 
+  ggplot(aes(x = p, color = model_name, fill = model_name)) +
+  geom_histogram(aes(y = ..count.. / num_sims),
+                 alpha = .3, binwidth = .05, position = 'identity') +
+  geom_vline(aes(xintercept = p, color = model_name),
+             data = df %>% 
+               group_by(model_name) %>%
+               summarize(p = mean(p)),
+             linetype = 'dashed') + 
+  labs(y = "% of Simulations",
+       x = "P-value") +
+  guides(fill=guide_legend(title="Model"),
+         color=guide_legend(title="Model"))
+```
+
+## Number of p-values <= 0.05
+
+```{r}
+df %>% 
+  filter(p <= .05) %>% 
+  group_by(model_name) %>% 
+  summarize(count = n())
+```
+
+
+## Mean p-values
+
+```{r}
+df %>% 
+  group_by(model_name) %>% 
+  summarize(mean = mean(p))
+```
+
+# Trajectories
+
+## 4 subjects to highlight
+
+```{r}
+plot_paths = function(sid) {
+  df_r = df_puzzle %>% 
+    filter(phase == 1,
+           subject_id == sid)
+  
+  df_p = df_top_paths %>%
+    filter(subject_id == sid) %>% 
+    merge(df_p_top_paths) %>% 
+    mutate(subject_id = as.factor(subject_id),
+           rank = as.factor(rank),
+           linesize = probability ^ .8,
+           probability = as.factor(round(probability, 3)),
+           accuracy = case_when(strategy == 'Uniform Guess' ~ 1/9,
+                                strategy == 'Avoid Constraints' ~ 1/6,
+                                strategy == 'Modal Digit' ~ 1/2,
+                                strategy == 'Hidden Singles' ~ 1))
+  
+  p = ggplot() +
+    geom_line(data = df_p,
+              aes(x = trial,
+                  y = accuracy,
+                  color = probability,
+                  size = linesize),
+              position = position_dodge(width = 0.35)) +
+    geom_point(data = df_r,
+               aes(x = trial,
+                   y = as.numeric(correct),
+                   fill = response_type),
+               shape = 21,
+               stroke = 0.25,
+               size = 1.5,
+               show.legend = FALSE) +
+    scale_size_identity() + 
+    labs(title = glue("Subject {sid}")) +
+    scale_fill_manual(values=colors) +
+    guides(color = guide_legend(reverse=TRUE),
+           fill = guide_legend(reverse=TRUE),
+           size = FALSE) +
+    coord_cartesian(y = c(0, 1))
+  
+  return (p)
+}
+```
+
+```{r}
+p = df_puzzle %>% 
+  filter(phase == 1,
+         subject_id == 154) %>% 
+  ggplot(aes(x = trial, y = correct, fill = response_type)) +
+  geom_point(shape = 21) +
+  theme(legend.position = 'bottom')
+legend = get_legend(p)
+  
+plot_1 = plot_paths(1)
+plot_2 = plot_paths(80)
+plot_3 = plot_paths(81)
+plot_4 = plot_paths(154)
+
+p = ggdraw() +
+  draw_plot(plot_1, x = 0, y = 0.5, width = .5, height = .5) +
+  draw_plot(plot_2, x = 0.5, y = 0.5, width = .5, height = .5) +
+  draw_plot(plot_3, x = 0, y = 0, width = .5, height = .5) +
+  draw_plot(plot_4, x = 0.5, y = 0, width = .5, height = .5) +
+  draw_plot_label(label = c("A", "B", "C", "D"),
+                  size = 13,
+                  x = c(0, .5, 0, 0.5), y = c(1, 1, .5, .5))
+
+p = ggdraw() + 
+  draw_plot(p, x = 0, y = 0.1, width = 1, height = .9) +
+  draw_grob(legend, x = 0, y = 0, width = 1, height = .1)
+
+ggsave(glue("../figures/practice_phase_aggregates/paths.png"), plot=p, width=8, height=4.5)
+```
+
+## All subjects
+
+```{r}
+subject_ids = df_subject %>% 
+  filter(!excluded) %>% 
+  pull(subject_id)
+
+for (sid in subject_ids) {
+  p = plot_paths(sid)
+  ggsave(glue("../figures/practice_phase_paths/{sid}.png"), plot = p,
+         width = 8, height = 4.5)
+}
+```
