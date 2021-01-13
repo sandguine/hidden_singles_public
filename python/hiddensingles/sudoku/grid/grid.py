@@ -5,6 +5,7 @@ from ..misc.exceptions import InvalidWriteException
 from ...misc import utils
 import joblib
 import re
+import itertools
 
 
 class Grid:
@@ -236,28 +237,22 @@ class GridString:
     def traverse_grid(self):
         """
         Returns a generator that traverses through each digit in the grid
-        :return:
+        :return: Generator of tuples (x, y, digit)
         """
         grid = self.grid_string
-        while grid:
+        for x, y in itertools.product(range(self.max_digit), range(self.max_digit)):
             if grid[0] == '.':
-                yield 0
+                yield (x, y, 0)
                 grid = grid[1:]
             else:
-                yield int(grid[:self.digit_stride])
+                yield (x, y, int(grid[:self.digit_stride]))
                 grid = grid[self.digit_stride:]
 
     def get_hints(self):
         hints = {}
-        digits = list(self.traverse_grid())
-
-        max_digit = self.dim_x * self.dim_y
-        i = 0
-        for x in range(max_digit):
-            for y in range(max_digit):
-                if digits[i]:
-                    hints[Coordinate(x, y)] = digits[i]
-                i += 1
+        for x, y, digit in self.traverse_grid():
+            if digit > 0:
+                hints[Coordinate(x, y)] = digit
         return hints
 
     def to_grid(self):
@@ -267,6 +262,17 @@ class GridString:
         for coord, digit in hints.items():
             grid.write(coord, digit)
         return grid
+
+    def array(self):
+        """
+        Creates a numpy array of the GridString.
+        This is faster than to_grid() since it doesn't 'write' the digits, thus performing no checks with pencilmarks.
+        :return:
+        """
+        a = np.zeros((self.max_digit, self.max_digit), dtype=int)
+        for x, y, digit in self.traverse_grid():
+            a[x, y] = digit
+        return a
 
     def seed_mapping(self):
         map = {self.grid_string[i]: str(i + 1) for i in range(self.max_digit)}

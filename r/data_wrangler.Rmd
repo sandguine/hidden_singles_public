@@ -50,8 +50,8 @@ sigmoid = function(x) {
 }
 
 p1_last_acc = glmer(correct ~ ltrial + (ltrial | subject_id),
-              family = "binomial",
-              data = df %>% filter(phase == 1)) %>%
+                    family = "binomial",
+                    data = df %>% filter(phase == 1)) %>%
   broom.mixed::augment() %>% 
   group_by(subject_id) %>% 
   filter(ltrial == max(ltrial)) %>%
@@ -59,8 +59,8 @@ p1_last_acc = glmer(correct ~ ltrial + (ltrial | subject_id),
   select(subject_id, p1_last_acc)
 
 p2_last_acc = glmer(correct ~ ltrial + (ltrial | subject_id),
-              family = "binomial",
-              data = df %>% filter(phase == 2)) %>%
+                    family = "binomial",
+                    data = df %>% filter(phase == 2)) %>%
   broom.mixed::augment() %>% 
   group_by(subject_id) %>% 
   filter(ltrial == max(ltrial)) %>%
@@ -115,7 +115,8 @@ subject_data = subject_data %>%
          solver = p1_last_acc >= solver_boundary,
          excluded = is.na(tut_house),
          p2_non_md = replace_na(p2_non_md, 0),
-         p2_last_8_solved = replace_na(p2_last_8_solved, 0))
+         p2_last_8_solved = replace_na(p2_last_8_solved, 0),
+         q_puzzle_digit = replace_na(q_puzzle_digit, 0))
 
 sid_map = subject_data %>% 
   select(subject_id_old, subject_id)
@@ -136,4 +137,63 @@ puzzle_data = puzzle_data %>%
 ```{r}
 write_tsv(subject_data, "../data/processed/subject_data.tsv")
 write_tsv(puzzle_data, "../data/processed/puzzle_data.tsv")
+```
+
+# For questionnaire rating
+
+```{r}
+set.seed(1)
+
+df = subject_data %>% 
+  filter(!solver,
+         p2_last_acc <= .6,
+         p2_non_md <= 6,
+         p2_last_8_solved >= 3,
+         p2_last_8_solved <= 5) 
+
+df = subject_data %>% 
+  filter(solver,
+         p2_last_acc >= .8) %>% 
+  rbind(df) %>% 
+  mutate(subject_id = sample(1:nrow(.))) %>% 
+  arrange(subject_id) %>% 
+  mutate(correct = ifelse(q_puzzle == 'target', 'Correct', 'Incorrect')) 
+
+df %>% 
+  select(subject_id, sid_hash, q_puzzle_digit, correct, q_strategy) %>% 
+  write_tsv("../data/processed/qrater.tsv")
+```
+
+## Pilot raters
+```{r}
+set.seed(2)
+
+df1 = df %>% 
+  filter(solver,
+         correct == 'Correct') %>% 
+  sample_n(9)
+
+df2 = df %>% 
+  filter(solver,
+         correct == 'Incorrect') %>% 
+  sample_n(1)
+
+df3 = df %>% 
+  filter(!solver,
+         correct == 'Correct') %>% 
+  sample_n(6)
+
+df4 = df %>% 
+  filter(!solver,
+         correct == 'Incorrect') %>% 
+  sample_n(4)
+
+df1 %>% 
+  rbind(df2) %>% 
+  rbind(df3) %>% 
+  rbind(df4) %>% 
+  mutate(subject_id = sample(1:nrow(.))) %>% 
+  arrange(subject_id) %>% 
+  select(subject_id, sid_hash, q_puzzle_digit, correct, q_strategy) %>% 
+  write_tsv("../data/processed/qrater_pilot.tsv")
 ```

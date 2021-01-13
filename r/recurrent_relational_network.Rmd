@@ -36,30 +36,93 @@ theme_set(theme_light() +
 # Load data
 
 ```{r}
-train_results = read_tsv("../data/rrn/train_results.tsv") %>% 
-  pivot_longer(cols = c(loss, accuracy, probability),
+df.rrn_train = read_tsv("../data/rrn/rrn_train_results.tsv") %>% 
+  pivot_longer(cols = c(loss, tr_accuracy, tr_probability,
+                        v_accuracy, v_probability),
                names_to = 'measure',
                values_to = 'value')
-test_results = read_tsv("../data/rrn/test_results.tsv")
+df.rrn_test = read_tsv("../data/rrn/rrn_test_results.tsv")
+
+df.drrn_train = read_tsv("../data/rrn/drrn_train_results.tsv") %>% 
+  pivot_longer(cols = c(loss, tr_accuracy, tr_probability,
+                        v_accuracy, v_probability),
+               names_to = 'measure',
+               values_to = 'value')
+df.drrn_test = read_tsv("../data/rrn/drrn_test_results.tsv")
+
+df.sudoku2x3 = read_tsv("../data/rrn/sudoku_2x3_results.tsv") %>% 
+  pivot_longer(cols = c(loss, accuracy, solved),
+               names_to = 'measure',
+               values_to = 'value') %>% 
+  mutate(dataset = factor(dataset, levels = c('train', 'test')),
+         measure = recode(measure,
+                          loss = "Loss",
+                          accuracy = "Cells Solved",
+                          solved = "Puzzles Solved"))
+df.sudoku3x3 = read_tsv("../data/rrn/sudoku_3x3_results.tsv") %>% 
+  pivot_longer(cols = c(loss, accuracy, solved),
+               names_to = 'measure',
+               values_to = 'value') %>% 
+  mutate(dataset = factor(dataset, levels = c('train', 'test')),
+         measure = recode(measure,
+                          loss = "Loss",
+                          accuracy = "Cells Solved",
+                          solved = "Puzzles Solved"))
 ```
 
-# Training dynamics
+# Replication
+
+## Sudoku 9x9 Grid
 
 ```{r}
-p = train_results %>% 
-  mutate(train_size = as.factor(train_size)) %>% 
-  filter(measure == 'accuracy') %>% 
-  ggplot(aes(x = epoch, y = value, color=train_size)) +
+p = df.sudoku3x3 %>% 
+  filter(measure != 'Loss') %>% 
+  ggplot(aes(x = epoch, y = value, color = measure, linetype = dataset)) +
   geom_line() +
-  labs(x = 'Epoch', y = 'Accuracy') +
+  labs(title = 'RRN - Sudoku 9x9', x = 'Epoch', y = 'Accuracy')
+
+ggsave('../figures/rrn/rrn_sudoku_9x9.png', plot = p, width = 8, height = 4.5)
+```
+
+## Sudoku 6x6 Grid
+
+```{r}
+p = df.sudoku2x3 %>% 
+  filter(measure != 'Loss') %>% 
+  ggplot(aes(x = epoch, y = value, color = measure, linetype = dataset)) +
+  geom_line() +
+  labs(title = 'RRN - Sudoku 6x6', x = 'Epoch', y = 'Percent')
+
+ggsave('../figures/rrn/rrn_sudoku_6x6.png', plot = p, width = 8, height = 4.5)
+```
+
+# RRN
+
+# DRRN
+
+## Training dynamics
+
+```{r}
+p = df.rrn_train %>% 
+  filter(train_size %in% c(25, 50, 100, 300, 500),
+         measure %in% c('tr_accuracy', 'v_accuracy')) %>% 
+  mutate(train_size = as.factor(train_size),
+         measure = recode(measure,
+                          tr_accuracy = 'Train',
+                          v_accuracy = 'Test')) %>% 
+  ggplot(aes(x = epoch, y = value, color=train_size, linetype = measure)) +
+  geom_line() +
+  labs(title = 'RRN - Hidden Singles', x = 'Epoch', y = 'Accuracy') +
   guides(color = guide_legend(title="Training Set Size"))
 
-ggsave('../figures/rrn/train_results.png', plot = p, width = 8, height = 4.5)
+ggsave('../figures/rrn/rrn_train_results.png', plot = p, width = 8, height = 4.5)
 ```
 
+## Test Results
+
 ```{r}
-p = test_results %>% 
-  filter(train_size == 500) %>% 
+p = df.rrn_test %>% 
+  filter(train_size == 100) %>% 
   pivot_longer(c(house_type, house_index, cell_index, digit_set),
                names_to='feature',
                values_to='condition') %>% 
@@ -82,9 +145,66 @@ p = test_results %>%
                orientation = "x",
                geom = "linerange",
                position = position_dodge(.9)) +
-  labs(x = "Feature",
+  labs(title = 'RRN - Hidden Singles Test',
+       x = "Feature",
        y = "Accuracy") +
   guides(fill = guide_legend(title="Changed"))
 
-ggsave('../figures/rrn/test_results.png', plot = p, width = 8, height = 4.5)
+ggsave('../figures/rrn/rrn_test_results.png', plot = p, width = 8, height = 4.5)
+```
+
+# DRRN
+
+## Training dynamics
+
+```{r}
+p = df.drrn_train %>% 
+  filter(epoch %% 5 == 0,
+         measure %in% c('tr_accuracy', 'v_accuracy')) %>% 
+  mutate(train_size = as.factor(train_size),
+         measure = recode(measure,
+                          tr_accuracy = 'Train',
+                          v_accuracy = 'Test')) %>% 
+  ggplot(aes(x = epoch, y = value, color=train_size, linetype = measure)) +
+  geom_line() +
+  labs(title = 'DRRN - Hidden Singles',
+       x = 'Epoch', y = 'Accuracy') +
+  guides(color = guide_legend(title="Training Set Size"))
+
+ggsave('../figures/rrn/drrn_train_results.png', plot = p, width = 8, height = 4.5)
+```
+
+## Test Results
+
+```{r}
+p = df.drrn_test %>% 
+  filter(train_size == 100) %>% 
+  pivot_longer(c(house_type, house_index, cell_index, digit_set),
+               names_to='feature',
+               values_to='condition') %>% 
+  mutate(correct = as.numeric(correct),
+         feature = recode_factor(feature,
+                                 digit_set = 'Digit Set',
+                                 house_index = 'House Index',
+                                 cell_index = 'Cell Index',
+                                 house_type = 'House Type',
+                                 .ordered = TRUE),
+         changed = ifelse(condition, 'Changed', 'Unchanged') %>% 
+           factor(levels = c('Unchanged', 'Changed'))) %>%
+  ggplot(aes(x = feature, y = correct, fill = changed)) +
+  stat_summary(orientation = "x",
+               fun = "mean",
+               geom = "bar",
+               size = 1.5,
+               position = position_dodge(.9)) +
+  stat_summary(fun.data = "mean_cl_boot",
+               orientation = "x",
+               geom = "linerange",
+               position = position_dodge(.9)) +
+  labs(title = 'DRRN - Hidden Singles Test',
+       x = "Feature",
+       y = "Accuracy") +
+  guides(fill = guide_legend(title="Changed"))
+
+ggsave('../figures/rrn/drrn_test_results.png', plot = p, width = 8, height = 4.5)
 ```
