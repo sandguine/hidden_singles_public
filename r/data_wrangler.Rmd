@@ -158,10 +158,6 @@ df = subject_data %>%
   mutate(subject_id = sample(1:nrow(.))) %>% 
   arrange(subject_id) %>% 
   mutate(correct = ifelse(q_puzzle == 'target', 'Correct', 'Incorrect')) 
-
-df %>% 
-  select(subject_id, sid_hash, q_puzzle_digit, correct, q_strategy) %>% 
-  write_tsv("../data/processed/qrater.tsv")
 ```
 
 ## Pilot raters
@@ -188,12 +184,24 @@ df4 = df %>%
          correct == 'Incorrect') %>% 
   sample_n(4)
 
-df1 %>% 
+qrater_pilot = df1 %>% 
   rbind(df2) %>% 
   rbind(df3) %>% 
   rbind(df4) %>% 
   mutate(subject_id = sample(1:nrow(.))) %>% 
   arrange(subject_id) %>% 
-  select(subject_id, sid_hash, q_puzzle_digit, correct, q_strategy) %>% 
+  select(subject_id, sid_hash, q_puzzle_digit, correct, q_strategy)
+
+qrater_pilot %>% 
   write_tsv("../data/processed/qrater_pilot.tsv")
+```
+
+All participants
+```{r}
+df %>% 
+  select(subject_id, sid_hash, q_puzzle_digit, correct, q_strategy) %>%
+  filter(!(sid_hash %in% qrater_pilot$sid_hash)) %>% 
+  bind_rows(qrater_pilot, .) %>% 
+  mutate(subject_id = seq(1, nrow(.))) %>% 
+  write_tsv("../data/processed/qrater.tsv")
 ```
