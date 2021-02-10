@@ -176,6 +176,7 @@ def get_survey_responses(raw_data):
             'gender': responses['gender'],
             'age': responses['age'],
             'education': edu_map[responses['education']],
+            'edu_status': responses['degree'],
             'prior_exposure': responses['prior_exposure'],
             'prior_attempt': responses['prior_attempt'],
             'prior_completed': responses['prior_completed']

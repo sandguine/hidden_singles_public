@@ -1,0 +1,410 @@
+---
+title: "questionnaire"
+author: "Andrew"
+date: "01/26/2021"
+output:
+  pdf_document:
+    number_sections: true
+---
+
+This file analyzes questionnaire ratings data.
+
+```{r setup, include=FALSE}
+# these options here change the formatting of how comments are rendered
+knitr::opts_chunk$set(collapse = TRUE,
+                      comment = "#>",
+                      results = "hold",
+                      fig.show = "hold")
+
+# Disable this warning
+options(dplyr.summarise.inform = FALSE)
+
+# Clear any existing variables
+rm(list = ls())
+```
+
+```{r libraries, echo=F, message=FALSE}
+library(lme4)
+library(glue)
+library(broom)
+library(tidyverse)
+```
+
+```{r plot_theme, echo=F}
+# Set ggplot theme
+theme_set(theme_light() +
+            theme(plot.title = element_text(hjust = 0.5)))
+```
+
+```{r load_data, echo=F, message=F, warning=F}
+df.subject_data = read_tsv("../data/processed/subject_data.tsv")
+df.results = read_tsv("../data/processed/puzzle_data.tsv")
+df.qratings1 = read_tsv("../data/qratings/rater1.tsv", quote = "") %>% 
+  mutate(rater = 'rater1')
+df.qratings2 = read_tsv("../data/qratings/rater2.tsv", quote = "") %>%
+  mutate(rater = 'rater2')
+```
+
+```{r wrangle, echo=F}
+df.qratings = df.qratings1 %>% 
+  bind_rows(df.qratings2) %>% 
+  select(sid_hash,
+         rater,
+         correct_eval = Evaluation,
+         correct_actual = Actual,
+         pd = PD,
+         aoe = AoE,
+         basis = `Basis for Choice`,
+         basis2 = `Second Choice`,
+         notes = `Additional Notes`) %>% 
+  mutate(correct_eval = correct_eval == 'Correct',
+         correct_actual = correct_actual == 'Correct',
+         pd = ifelse(pd == 'Vague or uncertain', 'Uncertain', pd),
+         pd = factor(pd, levels = c('Both',
+                                    'Target',
+                                    'Distractor',
+                                    'Neither',
+                                    'Uncertain')),
+         aoe = aoe == 'Yes with explanation',
+         basis = substring(basis, 0, 1),
+         basis2 = substring(basis2, 0, 1),
+         valid_basis = basis %in% c("A", "B", "C")) %>% 
+  replace_na(list(basis2 = "K")) %>% 
+  mutate(basis = factor(basis),
+         basis2 = factor(basis2))
+
+df.data = df.subject_data %>% 
+  right_join(df.qratings, by = "sid_hash") %>% 
+  mutate(solver = ifelse(solver, "Solver", "Non-Solver") %>% 
+           factor(levels = c('Solver', 'Non-Solver')))
+```
+
+# Correctness and Confidence
+
+```{r}
+df.data %>% 
+  select(subject_id, solver, correct_actual, q_confidence) %>% 
+  distinct() %>% 
+  group_by(solver) %>% 
+  summarize(n = n(),
+            acc.mean = mean(correct_actual),
+            acc.se = sd(correct_actual) / sqrt(n),
+            conf.mean = mean(q_confidence),
+            conf.se = sd(q_confidence) / sqrt(n)) %>% 
+  knitr::kable()
+```
+
+# Forced-response questions
+
+```{r wrangle_mc, echo=F}
+df.questions_long = df.data %>% 
+  select(subject_id,
+         solver,
+         q_attn_check1,
+         q_attn_check2,
+         q_attn_check3,
+         q_puzzle,
+         q_confidence,
+         q_digit_selection,
+         q_digit_check,
+         q_check_strategy_select) %>% 
+  distinct() %>% 
+  mutate(q_puzzle = q_puzzle == 'target',
+         q_digit_selection = str_sub(q_digit_selection, 0, 3) == 'I n',
+         q_digit_check = str_sub(q_digit_check, 0, 3) == 'Yes',
+         q_check_strategy_select = str_sub(q_check_strategy_select, 0, 3) != 'I l',
+         attn_check = (q_attn_check1 + q_attn_check2 + 1 - q_attn_check3) / 3,
+         solved = q_puzzle == 'target',
+         q_confidence = q_confidence / 100) %>% 
+  select(-c(q_attn_check1, q_attn_check2, q_attn_check3)) %>% 
+  pivot_longer(-c(subject_id, solver),
+               names_to = "measure",
+               values_to = "value") %>% 
+  mutate(measure = recode(measure,
+                          attn_check = "Attention Check",
+                          q_puzzle = "Solved Puzzle",
+                          q_confidence = "Puzzle Confidence",
+                          q_digit_selection = "Noticed",
+                          q_digit_check = "Checked Candidate",
+                          q_check_strategy_select = "Checked House"),
+         measure = factor(measure,
+                          levels = c("Attention Check",
+                                     "Solved Puzzle",
+                                     "Puzzle Confidence",
+                                     "Noticed",
+                                     "Checked Candidate",
+                                     "Checked House"))) %>% 
+  drop_na()
+```
+
+Forced-response summary statistics
+
+```{r mc_stats}
+df.questions_long %>% 
+  group_by(measure, solver) %>% 
+  summarize(mean = mean(value),
+            se = sd(value) / sqrt(n())) %>% 
+  knitr::kable()
+```
+
+
+```{r mc_bar, echo=F}
+# Forced-response bar plot
+
+counts = df.questions_long %>% 
+  group_by(solver, measure) %>% 
+  summarize(n = n())
+
+p = df.questions_long %>% 
+  ggplot(aes(x = measure, y = value, fill = solver)) +
+  stat_summary(fun = "mean",
+               geom = "bar",
+               position = position_dodge2()) +
+  stat_summary(fun.data = "mean_cl_boot",
+               geom = "linerange",
+               position = position_dodge2(.9)) +
+  geom_text(aes(x = measure, y = .025, label = n, group = solver),
+            data = counts,
+            vjust=0,
+            position = position_dodge(width = .9)) +
+  labs(x = "Question",
+       y = "Response") +
+  theme(legend.title = element_blank(),
+        legend.position = "bottom")
+
+ggsave(glue("../figures/questionnaire/q_mc.png"), plot=p, width=8, height=6)
+```
+
+
+## Did the raters correctly judge the correctness of subjects' responses?
+```{r rater_correct}
+df.data %>% 
+  mutate(correct_acc = correct_eval == correct_actual) %>% 
+  group_by(rater) %>% 
+  summarize(correct_acc = mean(correct_acc)) %>% 
+  knitr::kable()
+```
+
+## Did the raters agree on their decisions?
+
+### PD
+
+```{r pd_agree}
+df.data %>% 
+  select(subject_id, rater, pd) %>% 
+  pivot_wider(names_from = rater, values_from = pd) %>% 
+  mutate(agree = rater1 == rater2) %>% 
+  summarize(agree = mean(agree)) %>% 
+  knitr::kable()
+```
+
+```{r pd_tile, echo=F}
+# PD Agreement plot
+
+p = df.data %>% 
+  select(subject_id, rater, pd) %>% 
+  pivot_wider(names_from = rater, values_from = pd) %>% 
+  group_by(rater1, rater2) %>% 
+  summarize(n = n()) %>% 
+  complete(rater1, rater2, fill = list(n = 0)) %>% 
+  mutate(label = ifelse(n > 0, as.character(n), "")) %>% 
+  ggplot(aes(x = rater1, y = fct_rev(rater2), fill = n)) +
+  geom_tile() +
+  scale_fill_gradient(low = 'white',
+                      high = 'steelblue',
+                      na.value = 'white') +
+  geom_text(aes(label = label)) +
+  scale_x_discrete(position = "top") + 
+  theme(legend.position = "bottom") +
+  labs(title = 'Prevalent Digit Classifications',
+       x = 'Rater 1',
+       y = 'Rater 2') +
+  guides(fill = guide_colorbar(title = "No. of Subjects"))
+
+ggsave(glue("../figures/questionnaire/q_pd.png"), plot=p, width=8, height=6)
+```
+
+### Awareness of Error
+```{r aoe_agree}
+df.data %>% 
+  select(subject_id, rater, aoe) %>% 
+  drop_na(aoe) %>% 
+  pivot_wider(names_from = rater, values_from = aoe) %>% 
+  mutate(agree = rater1 == rater2) %>% 
+  summarize(agree = mean(agree)) %>% 
+  knitr::kable()
+```
+
+### Basis for Choice
+
+Rule: Either both first bases match or a first basis match with second basis.
+Since our focus on this analysis is just first basis, if only second bases match,
+we should just count them as disagreements.
+
+```{r basis_agree}
+df.data %>% 
+  select(subject_id, rater, basis, basis2) %>% 
+  mutate(across(c(basis, basis2),
+                .fns = as.character)) %>% 
+  pivot_wider(names_from = rater,
+              values_from = c('basis', 'basis2'),
+              names_glue = "{rater}_{.value}") %>% 
+  mutate(agree = rater1_basis == rater2_basis | 
+           rater1_basis == rater2_basis2 |
+           rater1_basis2 == rater2_basis) %>% 
+  select(subject_id, agree, everything()) %>% 
+  summarize(agree = mean(agree)) %>% 
+  knitr::kable()
+```
+
+
+```{r basis_tile, echo=F}
+# Visualizing only first bases.
+
+p = df.data %>% 
+  select(subject_id, solver, rater, basis) %>% 
+  pivot_wider(names_from = rater, values_from = basis) %>% 
+  group_by(rater1, rater2, solver) %>% 
+  summarize(n = n()) %>% 
+  complete(rater1, rater2, fill = list(n = 0)) %>% 
+  mutate(label = ifelse(n > 0, as.character(n), "")) %>% 
+  drop_na(solver) %>% 
+  ggplot(aes(x = rater1, y = fct_rev(rater2), fill = n)) +
+  geom_tile() +
+  scale_fill_gradient(low = 'white',
+                      high = 'steelblue',
+                      na.value = 'white') +
+  geom_text(aes(label = label)) +
+  scale_x_discrete(position = "top") + 
+  facet_wrap(vars(solver)) +
+  theme(legend.position = "bottom") +
+  labs(title = 'Basis for Choice Classifications',
+       x = 'Rater 1',
+       y = 'Rater 2') +
+  guides(fill = guide_colorbar(title = "No. of Subjects"))
+
+ggsave(glue("../figures/questionnaire/q_basis.png"), plot=p, width=8, height=6)
+```
+
+## Basis for Choice Group Differences
+
+Chi-squared tests
+```{r basis_tests, warning=F}
+df = df.data %>% 
+  filter(correct_actual)
+
+chisq.test(df$solver, df$basis)
+chisq.test(df$solver, df$valid_basis)
+```
+
+```{r basis_bar, echo=F}
+# Bar plot
+p = df.data %>% 
+  filter(correct_actual) %>% 
+  ggplot(aes(x = basis, fill = solver)) +
+  geom_bar(aes(y = ..prop..,
+               group = solver),
+           position = position_dodge2(preserve = "single")) +
+  theme(legend.title = element_blank(),
+        legend.position = "bottom") +
+  labs(x = "Basis",
+       y = "% of Participants")
+
+ggsave(glue("../figures/questionnaire/q_ratings.png"), plot=p, width=8, height=6)
+```
+
+
+# Education
+
+```{r edu_wrangle, echo=F, message=F}
+df.edu = df.results %>% 
+  group_by(subject_id) %>% 
+  summarize(n_solved = sum(correct)) %>% 
+  left_join(df.subject_data) %>% 
+  mutate(yoe = ifelse(education == 'mast', 18, 20),
+         yoe = ifelse(education == 'bach', 16, yoe),
+         yoe = ifelse(education == 'asso', 14, yoe),
+         yoe = ifelse(education == 'hs', 12, yoe),
+         yoe = ifelse(education == 'no_hs', 10, yoe),
+         education = yoe) %>% 
+  select(subject_id, sid_hash, solver, n_solved, education, starts_with('m_')) %>% 
+  rename_with(~str_sub(., start=3), starts_with('m_')) %>% 
+  mutate(across(is_logical, as.numeric)) %>% 
+  mutate(in_qrate = sid_hash %in% df.qratings1$sid_hash) %>% 
+  select(-sid_hash)
+```
+
+## Regressions
+
+### Education
+```{r fit_edu}
+lm.edu = lm(n_solved ~ education, df.edu)
+lm.edu %>% 
+  summary()
+```
+
+### Math
+```{r fit_math}
+lm.math = lm(n_solved ~ alg + geom + trig + sv_calc +
+               mv_calc + linalg + pr_stat + disc + logic,
+             df.edu)
+lm.math %>% 
+  summary()
+```
+
+### Algebra and Geometry
+```{r fit_ag}
+lm.ag = lm(n_solved ~ alg + geom, df.edu)
+lm.ag %>% 
+  summary()
+```
+
+### Education, algebra, and geometry
+```{r fit_eag}
+lm.eag = lm(n_solved ~ education + alg + geom, df.edu)
+lm.eag %>% 
+  summary()
+```
+
+### Education and math
+```{r fit_all}
+lm.all = lm(n_solved ~ education + alg + geom + trig + sv_calc +
+               mv_calc + linalg + pr_stat + disc + logic,
+            df.edu)
+lm.all %>% 
+  summary()
+```
+
+## Chi-sq Test
+
+```{r ag_dist}
+df.alggeom = df.edu %>% 
+  filter(in_qrate) %>% 
+  mutate(math = ifelse(alg + geom == 2, 'both', 'neither'),
+         math = ifelse(alg + geom == 1, 'one', math)) %>% 
+  select(subject_id, solver, math)
+
+df.alggeom %>% 
+  group_by(solver, math) %>% 
+  summarize(n = n()) %>% 
+  pivot_wider(names_from = math,
+              values_from = n) %>% 
+  select(solver, both, one, neither) %>% 
+  replace_na(list(neither = 0)) %>% 
+  knitr::kable()
+```
+
+```{r ag_chisq}
+chisq.test(df.alggeom$solver, df.alggeom$math)
+```
+
+
+
+
+
+
+
+
+
+
+

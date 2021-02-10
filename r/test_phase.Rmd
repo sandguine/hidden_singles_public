@@ -550,5 +550,5 @@ df.coefficients = df.bmodels %>%
   unnest(diagnostics) %>% 
   select(-fit)
 df.coefficients %>% 
-  write_tsv('../data/coefficients.tsv')
+  write_tsv('../data/test_phase_coefficients.tsv')
 ```
