@@ -149,4 +149,6 @@ All figures included in the paper, as well as ones not included, can be found in
 
 ## Other documents
 
-`documents/Sudoku Rater Instructions.pdf`: Instructions given the Questionnaire Raters.
+- `documents/Sudoku Rater Instructions.pdf`: instructions given the Questionnaire Raters.
+- `data/test_phase_coefficients.tsv`: Test Phase regression coefficients
+- `r/questionnaire.pdf`: contains results for education regressions, including coefficients, p-values, etc.
