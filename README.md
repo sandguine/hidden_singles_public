@@ -1,13 +1,13 @@
 # Hidden Singles
 Publicly available code and data for the Hidden Singles paper.
 
-# Running the experiment
+## Running the experiment
 
-## Settings
+### Settings
 Most settings can be found in `experiment/src/app/AppSettings.ts`. Most important are 
 `testEnvironment`, `hostURL`, `postURL`, and `saveDirectory`.
 
-## Puzzle Server
+### Puzzle Server
 Puzzles are randomly generated from a Python Flask server and may be accessed via HTTP.
 The React application queries the server for puzzles, so the Flask server must be up before
 running the React application. To deploy the server, run
@@ -19,7 +19,7 @@ python python/scripts/rest_api_endpoint.py
 You can see the generated puzzles and experiment details at `http://localhost:5001/sudoku_hs/experiment/new`.
 
 
-## Local deployment
+### Local deployment
 The experiment was written using React and may be executed locally.
 First, check that `hostURL` in `AppSettings.ts` is set to wherever the Flask server is deployed, e.g.
 `http://someurl:5001` or `http://localhost:5001`.
@@ -34,7 +34,7 @@ npm start
 If `testEnvironment` is true, `workerId` and `skipTo` may be added as additional parameters to the URL, such as `localhost:3000/?workerId=Andrew&skipTo=30`.
 `workerId` sets the seed for the randomized puzzles. `skipTo` allows skipping to different screens in the experiment.
 
-## Deploying on Amazon MTurk
+### Deploying on Amazon MTurk
 
 To deploy on Amazon MTurk, it is helpful to have a dedicated server, such as AWS.
 
@@ -55,7 +55,7 @@ psiturk
 
 You should enter the PsiTurk program where you can execute PsiTurk commands.
 
-## Saving data
+### Saving data
 
 The React app will periodically POST data to `postURL` in `AppSettings.ts`. This needs to point to any server that can receive POST requests.
 The POST payload is a JSON stream with two fields: `filename` and `data`. If you have your own server that can handle POST requests, you can handle these
@@ -65,23 +65,23 @@ In our experiments, we set up a cgi-bin with Python code to handle the incoming 
 
 
 
-# Data
+## Data
 
 The data from our experiments are organized as such:
 
-## Participant Data
+### Participant Data
 
 - `data/processed/puzzle_data.tsv`: contains trial-level data for each puzzle completed by each participant
 - `data/processed/subject_data.tsv`: contains participant-level data including overall performance, survey results, etc.
 - `data/processed/qrater.tsv`: contains data provided to the questionnaire raters
 - `data/processed/qrater.tsv`: same as qrater.tsv, except just the first 20 participants
 
-## Questionnaire Ratings
+### Questionnaire Ratings
 
 - `data/qratings/rater1.tsv`: contains questionnaire ratings from Rater 1
 - `data/qratings/rater2.tsv`: contains questionnaire ratings from Rater 2
 
-## Hidden Markov Model
+### Hidden Markov Model
 
 `{group}` refers to either solvers or nonsolvers.
 
@@ -92,7 +92,7 @@ The data from our experiments are organized as such:
 - `data/hmm/{group}/top_paths.tsv`: contains top 5 strategy paths for each participant based on the posterior probabilities
 - `data/hmm/{group}/top_paths_probs.tsv`: contains the posterior probability P(strategy_t | data) for the top 5 strategy paths for each participant
 
-## Recurrent Relational Network
+### Recurrent Relational Network
 
 `data/rrn_dataset/train.csv`: original training data used in Palm et al. (2016)
 `data/rrn_dataset/valid.csv`: original validation data used in Palm et al. (2016)
@@ -105,9 +105,48 @@ The data from our experiments are organized as such:
 `data/rrn/sudoku_2x3_results.tsv`: log of metrics for RRN while training on 36-cell Sudoku puzzles
 `data/rrn/sudoku_3x3_results.tsv`: log of metrics for RRN while training on 81-cell Sudoku puzzles
 
-## Data Wrangling
+### Data Wrangling
 
 To process the participant data files after running the experiment, first store all participants' generated data into 
-`data/raw`. Then run through the iPython Notebook in `python/scripts/Data Wrangler.ipynb`. Next, run through the
-R Markdown file in `r/data_wrangler.Rmd`. Note that the Rmd is not idempotent and should not be run more than once.
+`data/raw`. Then run through the `python/scripts/Data Wrangler.ipynb` iPython Notebook.
+Next, open `r/hidden_singles_public.Rproj` and run through the `data_wrangler.Rmd` R Markdown file.
+Note that the Rmd is not idempotent and should not be run more than once.
 To regenerate the data, run both the `ipynb` and `Rmd` each exactly once in that order.
+
+
+## Computational Models
+
+All computational models were written in Python and can be run by executing iPython Notebooks.
+
+`python/scripts/Hidden Markov Model`: code for training HMM to Practice Phase data. Saves output files to `data/hmm/`
+`python/scripts/RRN - Sudoku`: code for replicating Palm et al. (2016) results. Saves output files to `data/rrn/`
+`python/scripts/RRN - Sudoku 2x3`: code for replicating Palm et al. (2016) using simpler 36-cell puzzles. Saves output files to `data/rrn/`
+`python/scripts/RRN - Hidden Singles`: code for training and evaluating RRN and Digit-Invariant RRN to Hidden Singles puzzles. Saves output files to `data/rrn/`
+
+
+
+## Analyses and Figure Generation
+
+### R Files
+Analyses and data visualizations were done in R and can be run by executing R Markdown files.
+`.Rmd` files should be run within the `r/hidden_singles_public.Rproj` context.
+
+`practice_phase.Rmd`: code for analyzing Practice Phase data.
+`questionnaire.Rmd`: code for analyzing Questionnaire data, including education and free-response ratings.
+`recurrent_relational_network.Rmd`: code for analyzing RRN results.
+`test_phase.Rmd`: code for analyzing Test Phase data. Trains BRMS models that are cached into `r/cache/`.
+
+### Python Files
+Some figures were generated using Python.
+
+`python/scripts/Puzzle Figure Generator.ipynb`: code for generating Hidden Singles puzzle figures.
+`Screenshot Generator.ipynb`: code for taking screenshots of the React application. The app and Flask server must both be running locally.
+
+
+## Figures
+
+All figures included in the paper, as well as ones not included, can be found in the `figures` directory.
+
+## Other documents
+
+`documents/Sudoku Rater Instructions.pdf`: Instructions given the Questionnaire Raters.
