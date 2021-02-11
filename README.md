@@ -94,16 +94,16 @@ The data from our experiments are organized as such:
 
 ### Recurrent Relational Network
 
-`data/rrn_dataset/train.csv`: original training data used in Palm et al. (2016)
-`data/rrn_dataset/valid.csv`: original validation data used in Palm et al. (2016)
-`data/rrn_dataset/test.csv`: original test data used in Palm et al. (2016)
-`data/rrn_dataset/2x3_puzzles.tsv`: Sudoku puzzles with 36 cells. Useful for testing model with simpler puzzles.
-`data/rrn/drrn_test_results.tsv`: Digit-Invariant RRN results for out-of-distribution Hidden Single test puzzles
-`data/rrn/drrn_train_results.tsv`: log of metrics for Digit-Invariant RRN while training (e.g. loss, accuracy)
-`data/rrn/rrn_test_results.tsv`: RRN results for out-of-distribution Hidden Single test puzzles
-`data/rrn/rrn_train_results.tsv`: log of metrics for RRN while training (e.g. loss, accuracy)
-`data/rrn/sudoku_2x3_results.tsv`: log of metrics for RRN while training on 36-cell Sudoku puzzles
-`data/rrn/sudoku_3x3_results.tsv`: log of metrics for RRN while training on 81-cell Sudoku puzzles
+- `data/rrn_dataset/train.csv`: original training data used in Palm et al. (2016)
+- `data/rrn_dataset/valid.csv`: original validation data used in Palm et al. (2016)
+- `data/rrn_dataset/test.csv`: original test data used in Palm et al. (2016)
+- `data/rrn_dataset/2x3_puzzles.tsv`: Sudoku puzzles with 36 cells. Useful for testing model with simpler puzzles.
+- `data/rrn/drrn_test_results.tsv`: Digit-Invariant RRN results for out-of-distribution Hidden Single test puzzles
+- `data/rrn/drrn_train_results.tsv`: log of metrics for Digit-Invariant RRN while training (e.g. loss, accuracy)
+- `data/rrn/rrn_test_results.tsv`: RRN results for out-of-distribution Hidden Single test puzzles
+- `data/rrn/rrn_train_results.tsv`: log of metrics for RRN while training (e.g. loss, accuracy)
+- `data/rrn/sudoku_2x3_results.tsv`: log of metrics for RRN while training on 36-cell Sudoku puzzles
+- `data/rrn/sudoku_3x3_results.tsv`: log of metrics for RRN while training on 81-cell Sudoku puzzles
 
 ### Data Wrangling
 
@@ -118,10 +118,10 @@ To regenerate the data, run both the `ipynb` and `Rmd` each exactly once in that
 
 All computational models were written in Python and can be run by executing iPython Notebooks.
 
-`python/scripts/Hidden Markov Model`: code for training HMM to Practice Phase data. Saves output files to `data/hmm/`
-`python/scripts/RRN - Sudoku`: code for replicating Palm et al. (2016) results. Saves output files to `data/rrn/`
-`python/scripts/RRN - Sudoku 2x3`: code for replicating Palm et al. (2016) using simpler 36-cell puzzles. Saves output files to `data/rrn/`
-`python/scripts/RRN - Hidden Singles`: code for training and evaluating RRN and Digit-Invariant RRN to Hidden Singles puzzles. Saves output files to `data/rrn/`
+- `python/scripts/Hidden Markov Model`: code for training HMM to Practice Phase data. Saves output files to `data/hmm/`
+- `python/scripts/RRN - Sudoku`: code for replicating Palm et al. (2016) results. Saves output files to `data/rrn/`
+- `python/scripts/RRN - Sudoku 2x3`: code for replicating Palm et al. (2016) using simpler 36-cell puzzles. Saves output files to `data/rrn/`
+- `python/scripts/RRN - Hidden Singles`: code for training and evaluating RRN and Digit-Invariant RRN to Hidden Singles puzzles. Saves output files to `data/rrn/`
 
 
 
@@ -131,16 +131,16 @@ All computational models were written in Python and can be run by executing iPyt
 Analyses and data visualizations were done in R and can be run by executing R Markdown files.
 `.Rmd` files should be run within the `r/hidden_singles_public.Rproj` context.
 
-`practice_phase.Rmd`: code for analyzing Practice Phase data.
-`questionnaire.Rmd`: code for analyzing Questionnaire data, including education and free-response ratings.
-`recurrent_relational_network.Rmd`: code for analyzing RRN results.
-`test_phase.Rmd`: code for analyzing Test Phase data. Trains BRMS models that are cached into `r/cache/`.
+- `practice_phase.Rmd`: code for analyzing Practice Phase data.
+- `questionnaire.Rmd`: code for analyzing Questionnaire data, including education and free-response ratings.
+- `recurrent_relational_network.Rmd`: code for analyzing RRN results.
+- `test_phase.Rmd`: code for analyzing Test Phase data. Trains BRMS models that are cached into `r/cache/`.
 
 ### Python Files
 Some figures were generated using Python.
 
-`python/scripts/Puzzle Figure Generator.ipynb`: code for generating Hidden Singles puzzle figures.
-`Screenshot Generator.ipynb`: code for taking screenshots of the React application. The app and Flask server must both be running locally.
+- `python/scripts/Puzzle Figure Generator.ipynb`: code for generating Hidden Singles puzzle figures.
+- `Screenshot Generator.ipynb`: code for taking screenshots of the React application. The app and Flask server must both be running locally.
 
 
 ## Figures
