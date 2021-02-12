@@ -2,6 +2,7 @@ export const settings = {
   testEnvironment: true,
   // hostURL: 'http://52.53.212.49:5001',
   hostURL: 'http://localhost:5001',
+  postURL: "https://web.stanford.edu/~ajhnam/cgi-bin/post_endpoint.py",
   saveDirectory: 'hiddensingles/round1',
   numPhase1Puzzles: 25,
   numConditions: 8,

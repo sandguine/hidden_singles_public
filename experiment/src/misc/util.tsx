@@ -4,9 +4,7 @@ import * as React from "react";
 const _ = require('lodash');
 const stringify = require('json-stable-stringify');
 import * as moment from 'moment';
-
-const POST_URL = "https://web.stanford.edu/~ajhnam/cgi-bin/post_endpoint.py";
-
+import {settings} from "../app/AppSettings";
 
 export class Coordinate {
   readonly x: number;
@@ -104,7 +102,7 @@ export enum Color {
 
 async function attemptPost(filename: string, data: any) {
   const stringForm = stringify(data);
-  return await fetch(POST_URL, {
+  return await fetch(settings.postURL, {
     method: 'POST',
     mode: 'cors',
     headers: {
