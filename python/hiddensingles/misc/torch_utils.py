@@ -355,3 +355,79 @@ def write_subtensors(tensor, indices, values, clone=False):
     tensor.scatter_(dim, indices, values)
     if clone:
         return tensor
+
+
+def bmm(a, b):
+    """
+    Matrix multiplies last 2 dimensions while preserving the shape of the other dimensions
+    :param a: tensor of shape [d1, ..., dk, x, y]
+    :param b: tensor of shape [d1, ..., dk, y, z]
+    :return: tensor of shape [d1, ..., dk, x, z]
+    """
+    batch_shape = a.shape[:-2]
+    a = a.view(-1, *a.shape[-2:])
+    b = b.view(-1, *b.shape[-2:])
+    c = a.bmm(b)
+    c = c.view(*batch_shape, *c.shape[-2:])
+    return c
+
+
+def batch_outer(a, b, op='mul'):
+    """
+    Takes tensor a of shape [B, M] and tensor b of shape [B, N]
+    and returns a batchwise outer-product tensor of shape [B, M, N]
+    Can provide op to perform add, sub, mul, div
+    """
+    a = a.unsqueeze(-1)
+    b = b.unsqueeze(-2)
+    if op == 'add':
+        return a+b
+    if op == 'sub':
+        return a-b
+    if op == 'mul':
+        return a*b
+    if op == 'div':
+        return a/b
+    raise Exception("op must be one of 'add', 'sub', 'mul', or 'div'")
+
+
+def diag_sum(x, direction='dr'):
+    """
+    :param x: tensor of shape [batch_size, d, d]
+    :param direction:
+        'dr': computes diagonally down-right, going from top-left to bottom-right
+        'dl': computes diagonally down-left, going from top-right to bottom-left
+        'ur': computes diagonally up-right, going from bottom-left to top-right
+        'ul': computes diagonally up-left, going from bottom-right to top-left
+    :return:
+        tensor of shape [batch_size, 2*d - 1]
+
+    >>> x = torch.arange(18).view(2, 3, 3)
+    >>> x
+    tensor([[[ 0,  1,  2],
+             [ 3,  4,  5],
+             [ 6,  7,  8]],
+
+            [[ 9, 10, 11],
+             [12, 13, 14],
+             [15, 16, 17]]])
+    >>> diag_sum(x)
+    tensor([[ 0,  4, 12, 12,  8],
+            [ 9, 22, 39, 30, 17]])
+    """
+    assert direction in ('dr', 'dl', 'ur', 'ul')
+    #     no transform -> ur
+    if direction == 'dl':
+        x = x.flip(-2).flip(-1)
+    elif direction == 'dr':
+        x = x.flip(-2)
+    elif direction == 'ul':
+        x = x.flip(-1)
+    dim = x.shape[-1]
+    num_diagonls = 2 * dim - 1
+    w = torch.eye(dim, dtype=x.dtype, device=x.device)
+    w = prepend_shape(w, 1, 1)
+    x = x.unsqueeze(1)
+
+    result = F.conv2d(x, w, padding=num_diagonls // 2)[:, 0, num_diagonls // 2]
+    return result

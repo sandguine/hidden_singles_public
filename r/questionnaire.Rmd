@@ -299,12 +299,33 @@ chisq.test(df$solver, df$valid_basis)
 
 ```{r basis_bar, echo=F}
 # Bar plot
+counts = df.data %>% 
+  filter(correct_actual) %>% 
+  select(solver, basis) %>% 
+  group_by(solver, basis) %>% 
+  tally() %>% 
+  ungroup() %>% 
+  complete(solver, basis,
+           fill = list(n = 0)) %>% 
+  mutate(category = as.character(basis))
+  
 p = df.data %>% 
   filter(correct_actual) %>% 
-  ggplot(aes(x = basis, fill = solver)) +
-  geom_bar(aes(y = ..prop..,
-               group = solver),
-           position = position_dodge2(preserve = "single")) +
+  select(subject_id, solver, rater, basis) %>%
+  mutate(basis = as.character(basis)) %>% 
+  crossing(category = LETTERS[1:9]) %>% 
+  mutate(selected = as.numeric(category == basis)) %>% 
+  ggplot(aes(x = category, y = selected, fill = solver)) +
+  stat_summary(fun = "mean",
+               geom = "bar",
+               position = position_dodge2(preserve = "single")) +
+  stat_summary(fun.data = "mean_cl_boot",
+               geom = "linerange",
+               position = position_dodge2(.9)) +
+  geom_text(aes(x = category, y = -0.025, label = n, group = solver),
+          data = counts,
+          vjust=0,
+          position = position_dodge2(preserve = "single", width = .9)) +
   theme(legend.title = element_blank(),
         legend.position = "bottom") +
   labs(x = "Basis",

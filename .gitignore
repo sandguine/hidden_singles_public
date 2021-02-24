@@ -4,6 +4,8 @@ experiment/node_modules
 **/.idea
 data/raw
 r/cache/
+submissions/
+temp/
 
 
 # Byte-compiled / optimized / DLL files

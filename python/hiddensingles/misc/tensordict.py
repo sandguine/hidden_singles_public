@@ -60,6 +60,14 @@ class TensorDict(Mapping):
         shapes = [t.batch_shape if isinstance(t, TensorDict) else t.shape for t in self._dict.values()]
         return utils.lcs_from_start(shapes)
 
+    @property
+    def tensors(self):
+        return TensorDict(**{k: v for k, v in self._dict.items() if isinstance(v, torch.Tensor)})
+
+    @property
+    def tensordicts(self):
+        return TensorDict(**{k: v for k, v in self._dict.items() if isinstance(v, TensorDict)})
+
     @staticmethod
     def parse_tensor(tensor, shapes: Mapping):
         """
@@ -80,6 +88,9 @@ class TensorDict(Mapping):
 
     @staticmethod
     def cat(tensordicts: list, dim):
+        if len(tensordicts) == 0:
+            return TensorDict()
+
         tensors = {}
         for k, v in tensordicts[0]._dict.items():
             if type(v) == torch.Tensor:
@@ -90,6 +101,9 @@ class TensorDict(Mapping):
 
     @staticmethod
     def stack(tensordicts: list, dim):
+        if len(tensordicts) == 0:
+            return TensorDict()
+
         tensors = {}
         for k, v in tensordicts[0]._dict.items():
             if type(v) == torch.Tensor:
@@ -114,6 +128,26 @@ class TensorDict(Mapping):
                 raise KeyError("Key {} is in both TensorDicts. Set overwrite=True to allow other to overwrite.".format(k))
             td[k] = v
         return td
+
+    def flatten(self, *keys, stack=False, dim=0):
+        """
+        Extracts values matching keys in lower-level TensorDicts and flattens them to a single level TensorDict
+        :param keys: list of strings
+        :param stack: if True, flattens by stacking along dim. Else, concatenates along dim
+        :param dim: dimension to stack or cat
+        :return: TensorDict
+        """
+        keys = utils.extract_args(keys)
+        tensordict = TensorDict()
+        for k in keys:
+            if k in self:
+                tensordict[k] = self[k]
+            else:
+                tds = [t.flatten(k, stack=stack, dim=dim) for t in self.tensordicts.values()]
+                tds = [t for t in tds if k in t]
+                tds = TensorDict.stack(tds, dim=dim) if stack else TensorDict.cat(tds, dim=dim)
+                tensordict[k] = tds[k]
+        return tensordict
 
     def round(self, n_digits):
         tensors = {}

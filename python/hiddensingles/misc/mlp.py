@@ -54,7 +54,7 @@ class MLP(nn.Module):
             if layer is not self.layers[-1]:
                 x = self.activation(x)
 
-        if len(self.output_size) is 1:
+        if len(self.output_size) == 1:
             return x
 
         outputs = []

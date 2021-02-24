@@ -50,7 +50,7 @@ def extract_args(args):
     @return:
     """
     if len(args) == 1 and is_iterable(args[0]):
-        return args[0]
+        return args if isinstance(args[0], str) else args[0]
     return args
 
 
