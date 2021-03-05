@@ -1,4 +1,6 @@
 from . import utils
+import numpy as np
+import re
 import torch
 import torch.nn.functional as F
 
@@ -146,6 +148,19 @@ def nll_loss(input, target, reduction='mean'):
     return F.nll_loss(input, target, reduction=reduction)
 
 
+def normalize(x, dim=-1):
+    """
+    Divides every element by the sum across the dim.
+    :param x:
+    :param dim:
+    :return:
+
+    >>> normalize(torch.rand(4, 4), dim=1).sum(1)
+    tensor([1., 1., 1., 1.])
+    """
+    return x / x.sum(dim).unsqueeze(dim)
+
+
 def one_hot_encode(x, num_items=None):
     num_items = int(torch.max(x)+1) if num_items is None else num_items
     encoding = torch.zeros(x.shape + (num_items, ))
@@ -168,6 +183,20 @@ def prepend_shape(tensor, *shape):
     shape = utils.extract_args(shape)
     new_shape = tuple(shape) + tensor.shape
     return as_shape(tensor, *new_shape, reversed=True)
+
+
+def round(x, decimals=0, keep_device=True):
+    """
+    This is does not retain gradient information (which would be useless anyway)
+    :param x: tensor
+    :param decimals: number of decimals places to round
+    :param keep_device: if True, will return a tensor in the same device
+    :return:
+    """
+    device = x.device
+    x = x.detach().cpu().numpy().round(decimals)
+    x = torch.tensor(x, device=device if keep_device else 'cpu')
+    return x
 
 
 def select(tensor, indices, select_dims=0):
@@ -267,6 +296,25 @@ def swap_dims(tensor, dim_a, dim_b):
     shape = torch.arange(len(tensor.shape))
     shape[dim_a], shape[dim_b] = dim_b, dim_a
     return tensor.permute(*shape)
+
+
+def to_strings(x, dims=1, sep=','):
+    """
+    Turns the last dims dimensions into a string. Returns a numpy array.
+    :param x: tensor or numpy array
+    :param dims:
+    :param sep:
+    :return:
+    """
+    shape = x.shape[:-dims]
+
+    if isinstance(x, torch.Tensor):
+        x = x.view(-1, *x.shape[-dims:]).numpy()
+    else:
+        x = x.reshape(-1, *x.shape[-dims:])
+    x = [np.array2string(a, edgeitems=np.inf, separator=sep) for a in x]
+    x = [re.sub(r'[\ \[\]\n]|', '', s) for s in x]  # .split(',\n')
+    return np.array(x).reshape(shape)
 
 
 def write_subtensors(tensor, indices, values, clone=False):

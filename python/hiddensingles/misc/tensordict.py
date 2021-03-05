@@ -283,7 +283,37 @@ class TensorDict(Mapping):
         if round_digits > 0:
             torch.set_printoptions(precision=precision, sci_mode=sci_mode)
 
-    ### MISC OPERATIONS ###
+    ### SAVING ###
+
+    def save(self, path):
+        torch.save(self.cpu().to_dict(), path)
+
+    @staticmethod
+    def load(path):
+        d = torch.load(path)
+        return TensorDict.from_dict(d)
+
+    ### CASTING OPERATIONS ###
+
+    def to_dict(self):
+        d = {}
+        for k, v in self.tensors.items():
+            d[k] = v
+        for k, v in self.tensordicts.items():
+            d[k] = v.to_dict()
+        return d
+
+    @staticmethod
+    def from_dict(d: dict):
+        td = TensorDict()
+        for k, v in d.items():
+            if isinstance(v, torch.Tensor):
+                td[k] = v
+            elif isinstance(v, dict):
+                td[k] = TensorDict.from_dict(v)
+            else:
+                raise Exception("dict d contains values that are neither tensors nor dicts")
+        return td
 
     def to_dataframe(self, dimnames=None):
         """
