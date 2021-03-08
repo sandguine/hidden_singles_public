@@ -28,6 +28,7 @@ rm(list = ls())
 library(scales)
 library(cowplot)
 library(glue)
+library(DescTools)
 library(kSamples)
 library(ggExtra)
 library(broom)
@@ -180,7 +181,7 @@ plot_p_hs
 Table for actual values
 ```{r}
 df.p.hs %>% 
-  filter(hs.start.pred <= 1,
+  filter(hs.start.pred <= 3,
          threshold == .8) %>% 
   tidy_ecdf(hs.start.actual)
 ```
@@ -335,10 +336,12 @@ get_hs_acquired = function(p) {
   return (df)
 }
 
-plot_hs_acquired = tibble(p = c(.5, .7, .9, .95)) %>% 
+df = tibble(p = c(.5, .667, .8, .9)) %>% 
   mutate(temp = map(.x = p,
                     .f = ~get_hs_acquired(.x))) %>% 
-  unnest() %>% 
+  unnest()
+
+plot_hs_acquired = df  %>% 
   mutate(Confidence = as.factor(confidence)) %>% 
   ggplot(aes(x = trial, color = Confidence)) +
   geom_line(aes(y = ..y..),
@@ -353,6 +356,10 @@ plot_hs_acquired = tibble(p = c(.5, .7, .9, .95)) %>%
   theme(legend.position="bottom")
 
 plot_hs_acquired
+
+df %>% 
+  filter(confidence == .8) %>% 
+  tidy_ecdf(trial)
 ```
 
 
