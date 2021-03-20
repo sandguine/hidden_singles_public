@@ -43,7 +43,7 @@ def img_add_title(img, title, bg_color=(255, 255, 255)):
 
 
 def get_house_highlights(house_type, goal):
-    highlights = {Coordinate(i, goal.y) if house_type == 'column' else Coordinate(goal.x, i): c_bg_blue for i in
+    highlights = {Coordinate(i, goal.y) if house_type.lower() == 'column' else Coordinate(goal.x, i): c_bg_blue for i in
                   range(9)}
     return highlights
 
