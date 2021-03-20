@@ -26,46 +26,103 @@ rm(list = ls())
 ```
 
 ```{r libraries, message=FALSE}
-library(tidyverse)
+library(broom.mixed)
 library(glue)
 library(lme4)
+library(brms)
+library(tidyverse)
 ```
 
 
 # Load data
 
 ```{r}
-subject_data = read_tsv("../data/processed/subject_data.tsv")
-puzzle_data = read_tsv("../data/processed/puzzle_data.tsv")
+subject_data = read_tsv("../data/processed/subject_data_py.tsv")
+puzzle_data = read_tsv("../data/processed/puzzle_data_py.tsv")
 ```
 
 # Last trial accuracy
 
 ```{r}
-df = puzzle_data %>% 
-  mutate(ltrial = log2(trial))
-
 sigmoid = function(x) {
   return (1 / (1 + exp(-x)))
 }
 
-p1_last_acc = glmer(correct ~ ltrial + (ltrial | subject_id),
-                    family = "binomial",
-                    data = df %>% filter(phase == 1)) %>%
-  broom.mixed::augment() %>% 
-  group_by(subject_id) %>% 
-  filter(ltrial == max(ltrial)) %>%
-  mutate(p1_last_acc = sigmoid(.fitted)) %>% 
-  select(subject_id, p1_last_acc)
+df.p1 = puzzle_data %>% 
+  mutate(ltrial = log2(trial)) %>% 
+  filter(phase == 1)
+df.p2 = puzzle_data %>% 
+  mutate(ltrial = log2(trial)) %>% 
+  filter(phase == 2)
 
-p2_last_acc = glmer(correct ~ ltrial + (ltrial | subject_id),
+model.p1.acc = brm(correct ~ ltrial + (ltrial | subject_id),
+                   family = 'bernoulli',
+                   data = df.p1,
+                   save_pars = save_pars(all=TRUE),
+                   control = list(max_treedepth = 20),
+                   seed = 0,
+                   iter = 4000,
+                   cores = 4,
+                   refresh = 0,
+                   file = 'cache/p1.acc')
+model.p2.acc = brm(correct ~ ltrial + (ltrial | subject_id),
+                   family = 'bernoulli',
+                   data = df.p2,
+                   save_pars = save_pars(all=TRUE),
+                   control = list(max_treedepth = 20),
+                   seed = 0,
+                   iter = 4000,
+                   cores = 4,
+                   refresh = 0,
+                   file = 'cache/p2.acc')
+
+p1.last.acc = model.p1.acc %>% 
+  augment() %>% 
+  inner_join(df.p1, by = c('subject_id', 'ltrial')) %>% 
+  filter(trial == 25) %>% 
+  select(subject_id, p1_last_acc = .fitted)
+
+p2.last.acc = model.p2.acc %>% 
+  augment() %>% 
+  inner_join(df.p2, by = c('subject_id', 'ltrial')) %>% 
+  filter(trial == 64) %>% 
+  select(subject_id, p2_last_acc = .fitted)
+
+# Originally, subject_id was rearranged in descending order of last_acc according
+# to a standard glmer rather than the brm, so this is needed 
+p1.last.acc.freq = glmer(correct ~ ltrial + (ltrial | subject_id),
                     family = "binomial",
-                    data = df %>% filter(phase == 2)) %>%
+                    data = df.p1) %>%
   broom.mixed::augment() %>% 
   group_by(subject_id) %>% 
   filter(ltrial == max(ltrial)) %>%
-  mutate(p2_last_acc = sigmoid(.fitted)) %>% 
-  select(subject_id, p2_last_acc)
+  mutate(p1_last_acc_freq = sigmoid(.fitted)) %>% 
+  select(subject_id, p1_last_acc_freq) %>% 
+  ungroup()
+
+p1.last.acc = p1.last.acc %>% 
+  left_join(p1.last.acc.freq)
+```
+
+Print coefficients
+```{r}
+model.p1.acc %>% 
+  summary() %>% 
+  print(digits = 3)
+
+model.p2.acc %>% 
+  summary() %>% 
+  print(digits = 3)
+```
+
+```{r}
+model.p1.acc %>% 
+  summary()
+```
+
+```{r}
+model.p2.acc %>% 
+  summary()
 ```
 
 # Overall accuracy
@@ -81,7 +138,7 @@ accuracy = puzzle_data %>%
 
 # Non-modal digit responses
 ```{r}
-p2_non_md = puzzle_data %>% 
+p2.nonmd = puzzle_data %>% 
   filter(phase == 2,
          response_type != 'target',
          response_type != 'distractor') %>% 
@@ -91,7 +148,7 @@ p2_non_md = puzzle_data %>%
 
 # Solved in last 8 trials of phase 2
 ```{r}
-p2_last_8_solved = puzzle_data %>% 
+p2.last8solved = puzzle_data %>% 
   filter(phase == 2,
          trial > 56) %>% 
   group_by(subject_id) %>% 
@@ -105,11 +162,11 @@ solver_boundary = .8
 
 subject_data = subject_data %>% 
   merge(accuracy, all.x = T) %>% 
-  merge(p1_last_acc, all.x = T) %>% 
-  merge(p2_last_acc, all.x = T) %>% 
-  merge(p2_non_md, all.x = T) %>% 
-  merge(p2_last_8_solved, all.x = T) %>% 
-  arrange(desc(p1_last_acc), desc(p2_accuracy), sid_hash) %>% 
+  merge(p1.last.acc, all.x = T) %>% 
+  merge(p2.last.acc, all.x = T) %>% 
+  merge(p2.nonmd, all.x = T) %>% 
+  merge(p2.last8solved, all.x = T) %>% 
+  arrange(desc(p1_last_acc_freq), desc(p2_accuracy), sid_hash) %>% 
   mutate(subject_id_old = subject_id, # remap based on p1_last_acc
          subject_id = 1:nrow(subject_data),
          solver = p1_last_acc >= solver_boundary,
@@ -191,17 +248,24 @@ qrater_pilot = df1 %>%
   mutate(subject_id = sample(1:nrow(.))) %>% 
   arrange(subject_id) %>% 
   select(subject_id, sid_hash, q_puzzle_digit, correct, q_strategy)
-
-qrater_pilot %>% 
-  write_tsv("../data/processed/qrater_pilot.tsv")
 ```
 
 All participants
 ```{r}
-df %>% 
+qrater = df %>% 
   select(subject_id, sid_hash, q_puzzle_digit, correct, q_strategy) %>%
   filter(!(sid_hash %in% qrater_pilot$sid_hash)) %>% 
   bind_rows(qrater_pilot, .) %>% 
-  mutate(subject_id = seq(1, nrow(.))) %>% 
-  write_tsv("../data/processed/qrater.tsv")
+  mutate(subject_id = seq(1, nrow(.)))
+```
+
+Save files
+```{r}
+# Don't overwrite. Somehow, the order of subjects got changed, so won't be consistent
+# with the files that the raters saw.
+
+# qrater_pilot %>% 
+#   write_tsv("../data/processed/qrater_pilot.tsv")
+# qrater %>% 
+#   write_tsv("../data/processed/qrater.tsv")
 ```

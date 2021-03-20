@@ -28,11 +28,20 @@ rm(list = ls())
 ```
 
 ```{r libraries, message=FALSE}
-library(tidyverse)
 library(lme4)
 library(broom)
 library(glue)
 library(brms)
+library(cowplot)
+library(tidyverse)
+
+source('functions.R')
+```
+
+```{r plot_theme, echo=F}
+# Set ggplot theme
+theme_set(theme_light() +
+            theme(plot.title = element_text(hjust = 0.5)))
 ```
 
 # Initialization
@@ -74,15 +83,18 @@ solvers = df_subjects %>%
 df_puzzles = read_tsv(glue("../data/processed/puzzle_data.tsv")) %>% 
   filter(subject_id %in% solvers,
          phase == 2) %>% 
-  mutate(subject_id = as.factor(subject_id),
-         ltrial = log2(trial),
-         lduration = log2(duration)) %>% 
   rename(ht = house_type,
          hi = house_index,
          ci = cell_index,
          ds = digit_set) %>% 
+  mutate(subject_id = as.factor(subject_id),
+         set = 1 + floor((trial - 1) / 8),
+         lset = log2(8*set - 3.5),
+         ltrial = log2(trial),
+         lduration = log2(duration),
+         gp = hi | ci) %>% 
   arrange(subject_id, trial) %>% 
-  select(subject_id, trial, ht, hi, ci, ds, correct, duration, ltrial, lduration)
+  select(subject_id, set, trial, ht, hi, ci, ds, gp, correct, duration, lset, ltrial, lduration)
 ```
 
 ## Regression Set-up
@@ -117,6 +129,225 @@ df.acc.ht_f6 = df.acc6 %>% filter(!ht)
 df.dur6 = df.acc6 %>% filter(correct == 1)
 df.dur.ht_t6 = df.dur6 %>% filter(ht)
 df.dur.ht_f6 = df.dur6 %>% filter(!ht)
+```
+
+# Figures
+
+## Functions
+
+```{r}
+create_acc_plot = function(df) {
+  # df must contain trial, condition, correct
+  df = df %>% 
+    mutate(set = 1 + floor((trial - 1) / 8),
+           lset = log2(8*set - 3.5),
+           ltrial = log2(trial),
+           correct = as.numeric(correct))
+  
+  df.sum.stats = df %>% 
+    get_beta_hdci(correct, 100000, groups=c('lset', 'condition'))
+  
+  df %>% 
+    ggplot(aes(color = condition)) +
+    stat_summary(aes(x = ltrial,
+                     y = correct),
+                 orientation = "x",
+                 fun = "mean",
+                 geom = "point",
+                 alpha = .25,
+                 size = .75) +
+    stat_summary(aes(x = lset,
+                     y = correct),
+                 orientation = "x",
+                 fun = "mean",
+                 geom = "point",
+                 size = 1.25,
+                 position = position_dodge(.15)) +
+    geom_linerange(aes(x = lset,
+                       ymin = hdci_l,
+                       ymax = hdci_h,
+                       group = condition),
+                   data = df.sum.stats,
+                   position = position_dodge2(.15)) +
+    scale_x_continuous(breaks = 0:6,
+                       labels = 2^(0:6)) +
+    coord_cartesian(ylim=c(.75, 1)) +
+    theme(legend.position = "none") +
+    guides(color = guide_legend(title = "Condition")) +
+    labs(x = "Trial",
+         y = 'Accuracy')
+}
+
+create_dur_plot = function(df, brm_savefile) {
+  # df must contain trial, condition, duration
+  df = df %>% 
+    mutate(lduration = log2(duration),
+           set = 1 + floor((trial - 1) / 8),
+           lset = log2(8*set - 3.5),
+           ltrial = log2(trial))
+  
+  model = brm(lduration ~ 0 + set:condition,
+              data = df %>% 
+                mutate(set = as.factor(set)),
+              save_pars = save_pars(all=TRUE),
+              seed = 0,
+              iter = 4000,
+              cores = 4,
+              refresh = 0,
+              file = brm_savefile)
+  
+  df.sum.stats = summary(model)$fixed %>% 
+    as_tibble(rownames = 'term') %>% 
+    mutate(set = map_chr(term, ~ str_match(., "set*(.*?):")[,2]),
+           set = as.numeric(set),
+           condition = map_chr(term, ~ sub('.*condition', '', .))) %>% 
+    select(set, condition, estimate = Estimate, hdci_l = `l-95% CI`, hdci_h = `u-95% CI`)
+  
+  df.sum.stats = df %>% 
+    select(set, lset) %>% 
+    distinct() %>% 
+    left_join(df.sum.stats)
+  
+  df %>% 
+    ggplot(aes(color = condition)) +
+    stat_summary(aes(x = ltrial,
+                     y = lduration),
+                 orientation = "x",
+                 fun = "mean",
+                 geom = "point",
+                 alpha = .25,
+                 size = .75) +
+    stat_summary(aes(x = lset,
+                     y = lduration),
+                 orientation = "x",
+                 fun = "mean",
+                 geom = "point",
+                 size = 1.25,
+                 position = position_dodge(.15)) +
+    geom_linerange(aes(x = lset,
+                       ymin = hdci_l,
+                       ymax = hdci_h,
+                       group = condition),
+                   data = df.sum.stats,
+                   position = position_dodge2(.15)) +
+    scale_x_continuous(breaks = 0:6,
+                       labels = 2^(0:6)) +
+    scale_y_continuous(breaks = log2(seq(4, 28, 4)),
+                       labels = seq(4, 28, 4)) +
+    coord_cartesian(ylim = c(3, log2(28))) +
+    theme(legend.position = "none") +
+    guides(color = guide_legend(title = "Condition")) +
+    labs(x = "Trial",
+         y = 'Seconds')
+}
+```
+
+## Accuracy plots
+```{r}
+plot.ht.acc = df_puzzles %>% 
+  mutate(condition = ifelse(ht, 'Changed', 'Unchanged')) %>% 
+  create_acc_plot() +
+  labs(title = "House Type Accuracy")
+
+plot.hi.acc = df_puzzles %>% 
+  mutate(condition = ifelse(hi, 'Changed', 'Unchanged')) %>% 
+  create_acc_plot() +
+  labs(title = "House Index Accuracy")
+
+plot.ci.acc = df_puzzles %>% 
+  mutate(condition = ifelse(ci, 'Changed', 'Unchanged')) %>% 
+  create_acc_plot() +
+  labs(title = "Cell Index Accuracy")
+
+plot.ds.acc = df_puzzles %>% 
+  mutate(condition = ifelse(ds, 'Changed', 'Unchanged')) %>% 
+  create_acc_plot() +
+  labs(title = "Digit Set Accuracy")
+
+plot.gp.acc = df_puzzles %>% 
+  mutate(condition = ifelse(gp, 'Changed', 'Unchanged')) %>% 
+  create_acc_plot() +
+  labs(title = "Goal Position Accuracy")
+```
+
+
+## House type duration
+
+```{r}
+plot.ht.dur = df_puzzles %>% 
+  filter(correct) %>% 
+  mutate(condition = ifelse(ht, 'Changed', 'Unchanged')) %>% 
+  create_dur_plot('cache/ht.dur.plot') +
+  labs(title = "House Type Response Time")
+
+plot.hi.dur = df_puzzles %>% 
+  filter(correct) %>% 
+  mutate(condition = ifelse(hi, 'Changed', 'Unchanged')) %>% 
+  create_dur_plot('cache/hi.dur.plot') +
+  labs(title = "House Index Response Time")
+
+plot.ci.dur = df_puzzles %>% 
+  filter(correct) %>% 
+  mutate(condition = ifelse(ci, 'Changed', 'Unchanged')) %>% 
+  create_dur_plot('cache/ci.dur.plot') +
+  labs(title = "Cell Index Response Time")
+
+plot.ds.dur = df_puzzles %>% 
+  filter(correct) %>% 
+  mutate(condition = ifelse(ds, 'Changed', 'Unchanged')) %>% 
+  create_dur_plot('cache/ds.dur.plot') +
+  labs(title = "Digit Set Response Time")
+
+plot.gp.dur = df_puzzles %>% 
+  filter(correct) %>% 
+  mutate(condition = ifelse(gp, 'Changed', 'Unchanged')) %>% 
+  create_dur_plot('cache/gp.dur.plot') +
+  labs(title = "Goal Position Response Time")
+```
+
+## Plot for manuscript
+
+```{r}
+legend = (plot.ds.dur +
+            theme(legend.position="bottom")) %>% 
+  get_legend()
+
+p = ggdraw() +
+  draw_plot(plot.ds.acc, x = 0, y = .5, width = .5, height = .5) +
+  draw_plot(plot.ht.acc, x = .5, y = .5, width = .5, height = .5) +
+  draw_plot(plot.ds.dur, x = 0, y = 0, width = .5, height = .5) + 
+  draw_plot(plot.ht.dur, x = .5, y = 0, width = .5, height = .5) + 
+  draw_plot_label(label = c("A", "C", "B", "D"),
+                  size = 15,
+                  x = c(0, 0, 0.5, 0.5), y = c(1, .5, 1, .5))
+
+ggdraw() +
+  draw_plot(p, x = 0, y = .05, width = 1, height = .95) +
+  draw_grob(legend, 0, 0, 1, .05) +
+  ggsave(glue("../figures/test_phase/ds_ht_results.png"), width=8, height=6)
+```
+
+## Plot for supplement
+```{r}
+legend = (plot.gp.acc +
+            theme(legend.position="bottom")) %>% 
+  get_legend()
+
+p = ggdraw() +
+  draw_plot(plot.gp.acc, x = 0, y = .666, width = .5, height = .334) +
+  draw_plot(plot.gp.dur, x = .5, y = .666, width = .5, height = .334) +
+  draw_plot(plot.hi.acc, x = 0, y = .333, width = .5, height = .333) + 
+  draw_plot(plot.hi.dur, x = .5, y = .333, width = .5, height = .333) + 
+  draw_plot(plot.ci.acc, x = 0, y = 0, width = .5, height = .333) + 
+  draw_plot(plot.ci.dur, x = .5, y = 0, width = .5, height = .333) + 
+  draw_plot_label(label = c("A", "B", "C", "D", "E", "F"),
+                  size = 15,
+                  x = c(0, .5, 0, 0.5, 0, .5), y = c(1, 1, .666, .666, .333, .333))
+
+ggdraw() +
+  draw_plot(p, x = 0, y = .05, width = 1, height = .95) +
+  draw_grob(legend, 0, 0, 1, .05) +
+  ggsave(glue("../figures/test_phase/gp_hi_ci_results.png"), width=8, height=9)
 ```
 
 # House Type
@@ -220,7 +451,7 @@ bmodel.ht.ht0.dur = brm(lduration ~ start_col*ht*ltrial + (ltrial | subject_id),
 bmodel.ht.ht0.acc2 = brm(correct ~ start_col*ht + ltrial + (ltrial | subject_id),
                          family = 'bernoulli',
                          data = df.acc2 %>% 
-                          merge(df),
+                           merge(df),
                          save_all_pars = TRUE,
                          seed = 0,
                          cores = 4,
@@ -229,7 +460,7 @@ bmodel.ht.ht0.acc2 = brm(correct ~ start_col*ht + ltrial + (ltrial | subject_id)
 
 bmodel.ht.ht0.dur2 = brm(lduration ~ start_col*ht + ltrial + (ltrial | subject_id),
                          data = df.dur2 %>% 
-                          merge(df),
+                           merge(df),
                          save_all_pars = TRUE,
                          seed = 0,
                          cores = 4,
@@ -239,7 +470,7 @@ bmodel.ht.ht0.dur2 = brm(lduration ~ start_col*ht + ltrial + (ltrial | subject_i
 bmodel.ht.ht0.acc6 = brm(correct ~ start_col*ht + ltrial + (ltrial | subject_id),
                          family = 'bernoulli',
                          data = df.acc6 %>% 
-                          merge(df),
+                           merge(df),
                          iter = 5000,
                          control = list(adapt_delta = 0.99),
                          save_all_pars = TRUE,
@@ -250,7 +481,7 @@ bmodel.ht.ht0.acc6 = brm(correct ~ start_col*ht + ltrial + (ltrial | subject_id)
 
 bmodel.ht.ht0.dur6 = brm(lduration ~ start_col*ht + ltrial + (ltrial | subject_id),
                          data = df.dur6 %>% 
-                          merge(df),
+                           merge(df),
                          save_all_pars = TRUE,
                          seed = 0,
                          cores = 4,
