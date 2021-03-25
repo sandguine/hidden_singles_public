@@ -148,7 +148,7 @@ df.hs.train %>%
          color = guide_legend(title="Training Set Size")) +
   theme(legend.position = 'bottom') +
   facet_wrap(vars(run_id)) +
-  ggsave('../figures/rrn/drrn_train.png', width = 8, height = 4.5)
+  ggsave('../figures/rrn/drrn_hs.png', width = 8, height = 4.5)
 ```
 
 ## Test plot
