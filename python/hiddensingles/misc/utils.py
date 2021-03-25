@@ -50,12 +50,12 @@ def extract_args(args):
     @return:
     """
     if len(args) == 1 and is_iterable(args[0]):
-        return args if isinstance(args[0], str) else args[0]
+        return args[0]
     return args
 
 
-def is_iterable(obj):
-    return isinstance(obj, Iterable)
+def is_iterable(obj, allow_str=False):
+    return isinstance(obj, Iterable) and (allow_str or not isinstance(obj, str))
 
 
 def short_hash(strings: list, hash_length: int):
@@ -81,6 +81,12 @@ def replace(s: str, replacements: dict):
     replace_with = {v: replacements[k] for k, v in replace_tokens.items()}
     regex_replace = re.compile('|'.join(map(re.escape, list(replace_tokens.values()))))
     return regex_replace.sub(lambda match: replace_with[match.group(0)], s)
+
+
+def substring_between(s, before, after):
+    i = s.index(before) + len(before)
+    j = s[i:].index(after)
+    return s[i:][:j]
 
 
 def get_combinations(a, b):

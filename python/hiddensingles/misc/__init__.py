@@ -4,3 +4,4 @@ from .nnmodule import nnModule
 from .mlp import MLP
 from .rrn import RRN
 from .digit_rrn import DigitRRN
+from .gpu_multiprocessor import GPUMultiprocessor
