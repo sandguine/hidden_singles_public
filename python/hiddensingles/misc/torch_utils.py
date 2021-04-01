@@ -1,5 +1,6 @@
 from . import utils
 import numpy as np
+import math
 import re
 import torch
 import torch.nn.functional as F
@@ -50,6 +51,22 @@ def cross_entropy(input, target, reduction='mean'):
     dims = [0, -1] + list(range(1, len(input.shape) - 1))
     input = input.permute(dims)
     return F.cross_entropy(input, target, reduction=reduction)
+
+
+def ehdci(samples, p=.95):
+    """
+    Computes the empirical highest density continuous interval, applied along the last dim of samples
+    :param samples: tensor of shape [d1, ..., dn]
+    :param p: fraction of samples to include in hdci
+    :return: tensor of shape [d1, ..., d{n-1}, 2] where the last dimension contains HDCI_low and HDCI_high
+    """
+    interval_size = math.ceil(p * samples.shape[-1]) # number of samples in hdci
+    samples = samples.sort(-1)[0]
+    intervals = samples.unfold(-1, interval_size, 1) # creates windows of interval_size along last dim
+    ranges = intervals[..., -1] - intervals[..., 0]
+    idx = ranges.argmin(-1)
+    hdci = select_subtensors(intervals, idx)
+    return torch.stack([hdci[..., 0], hdci[..., -1]], dim=-1)
 
 
 def expand_along_dim(tensor, dim, n):

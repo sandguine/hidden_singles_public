@@ -11,7 +11,7 @@ import itertools
 from collections.abc import Iterable
 
 
-def kv_str(_delim=" | ", **kwargs):
+def kv_str(_delim=" | ", _digits=3, **kwargs):
     s = []
     for k, v in kwargs.items():
         if isinstance(v, torch.Tensor):
@@ -20,17 +20,22 @@ def kv_str(_delim=" | ", **kwargs):
             else:
                 v = v.detach().cpu()
         if isinstance(v, float):
-            v = round(v, 3)
+            v = round(v, _digits)
         s.append("{}: {}".format(k, v))
     s = _delim.join(s)
     return s
 
 
-def kv_print(_delim=" | ", **kwargs):
+def kv_print(_delim=" | ", _digits=3, **kwargs):
     """
     Pretty-prints kwargs
+
+    :param _delim: Delimiter to separate kwargs
+    :param _digits: number of decimal digits to round to
+    :param kwargs: stuff to print
+    :return:
     """
-    print(kv_str(_delim, **kwargs))
+    print(kv_str(_delim, _digits=_digits, **kwargs))
 
 
 def mkdir(dirname):
