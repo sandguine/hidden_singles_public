@@ -68,6 +68,8 @@ colors[[response_names[4]]] = hues[2]
 
 # Disable summarize ungroup messages
 options(dplyr.summarise.inform = FALSE)
+
+update_geom_defaults("bar",   list(fill = hues[3]))
 ```
 
 # Helper functions
@@ -150,51 +152,57 @@ df.p.hs = df.hs.actual %>%
   left_join(df.hs.pred)
 ```
 
-## Hidden single acquisition trial accuracy
+## P(actual_strat = HS | predicted_strat = HS)
 
-For each predicted hs.start, what was the distribution of actual hs.start?
-
-Facet T: Samples that the model predicted by using HS by trial T
-y-axis: Actual % of samples that were using HS by each trial
 ```{r}
-plot_p_hs = df.p.hs %>% 
-  filter(threshold == .8) %>% 
-  crossing(trial = c(1, 3, 5, 10)) %>% 
-  filter(hs.start.pred <= trial) %>% 
-  group_by(trial) %>% 
-  nest() %>% 
-  mutate(d = map(data, ~tidy_ecdf(., hs.start.actual))) %>% 
-  unnest(cols = d) %>% 
-  select(-data) %>% 
-  mutate(trial = as.factor(trial)) %>% 
-  ggplot(aes(x = hs.start.actual, y = cdf, color = trial)) +
+df = df.sim.strategy %>% 
+  filter(strategy == 'HS') %>% 
+  crossing(threshold = c(.5, .667, .8, .9)) %>% 
+  filter(p_predicted >= threshold) %>% 
+  group_by(trial, threshold) %>% 
+  summarize(accuracy = mean(p_actual)) %>% 
+  mutate(threshold = factor(threshold))
+
+df %>% 
+  ggplot(aes(x = trial, y = accuracy, color = threshold)) +
   geom_line() +
   geom_point() + 
-  labs(x = "Actual Trial",
-       y = "% of Samples Using HS") +
-  guides(color = guide_legend(title="Predicted Trial")) +
-  theme(legend.position = "bottom")
-
-plot_p_hs
+  labs(x = "Trial",
+       y = "Accuracy") +
+  guides(color = guide_legend(title="Threshold")) +
+  theme(legend.position = c(.89, .245),
+        legend.box.background = element_rect(colour = "black")) +
+  ggsave(glue("../figures/practice_phase/p_hs_accuracy.png"), width=8, height=4.5)
 ```
 
-Table for actual values
-```{r}
-df.p.hs %>% 
-  filter(hs.start.pred <= 3,
-         threshold == .8) %>% 
-  tidy_ecdf(hs.start.actual)
-```
+## Predicted xtrial given actual xtrial
 
-## Accuracy by distance from transition point
-
-Overall accuracy of the model
 ```{r}
-df.sim.strategy %>% 
-  group_by(sim, trial) %>% 
-  filter(p_predicted == max(p_predicted)) %>% 
-  ungroup() %>% 
-  summarize(accuracy = mean(p_actual))
+df.xsim.actual = df.sim.strategy %>% 
+  filter(p_actual == 1,
+         strategy == 'HS') %>% 
+  group_by(sim) %>% 
+  summarize(actual = min(trial))
+  
+df.xsim.pred = df.sim.strategy %>% 
+  filter(p_predicted >= .8,
+         strategy == 'HS') %>% 
+  group_by(sim) %>% 
+  summarize(predicted = min(trial))
+
+df.xsim.actual %>% 
+  left_join(df.xsim.pred) %>% 
+  filter(actual %in% c(1, 3, 5, 10)) %>% 
+  group_by(actual, predicted) %>% 
+  count() %>% 
+  group_by(actual) %>% 
+  mutate(p = n / sum(n)) %>% 
+  ggplot(aes(x = predicted, y = p)) +
+  geom_bar(stat = 'identity') +
+  labs(x = "Predicted Transition Trial",
+       y = "Proportion of Samples") +
+  facet_wrap(vars(actual)) +
+  ggsave(glue("../figures/practice_phase/pred_xtrial.png"), width=8, height=4.5)
 ```
 
 Create table with AUROC
@@ -212,21 +220,21 @@ df = df.sim.strategy %>%
   mutate(predicted = p_predicted >= threshold) %>% 
   rename(pred_strategy = strategy) %>% 
   inner_join(df.xtrials) %>% 
-  mutate(dist_from_xtrial = .5 + abs(trial - xtrial),
+  mutate(dist_from_xtrial = abs(trial - xtrial) - .5,
          actual = as.logical(p_actual)) %>% 
   select(sim, xstrategy, pred_strategy, threshold, dist_from_xtrial, actual, predicted) %>% 
   arrange(sim, threshold, xstrategy, dist_from_xtrial)
 
 df.tpr = df %>% 
   filter(actual) %>% 
-  crossing(dist = 1:24) %>% 
+  crossing(dist = 0:23) %>% 
   filter(dist_from_xtrial <= dist) %>% 
   group_by(xstrategy, threshold, dist) %>% 
   summarize(tpr = mean(predicted))
 
 df.fpr = df %>% 
   filter(!actual) %>% 
-  crossing(dist = 1:24) %>% 
+  crossing(dist = 0:23) %>% 
   filter(dist_from_xtrial <= dist) %>% 
   group_by(xstrategy, threshold, dist) %>% 
   summarize(fpr = mean(predicted))
@@ -239,26 +247,27 @@ df.auc = df.roc %>%
   summarize(auc = AUC(fpr, tpr))
 
 df.auc %>% 
-  filter(dist == 1)
+  filter(dist == 0)
 ```
 
 ```{r}
-plot_auc = df.auc %>% 
+df.auc %>% 
   ggplot(aes(x = dist, y = auc, color = xstrategy)) + 
   geom_line() +
   labs(x = "Distance From Transition Trial",
        y = "Area Under ROC") +
   guides(color = guide_legend(title="Transition Strategy")) +
-  theme(legend.position = "bottom")
-
-plot_auc
+  theme(legend.position = "bottom") +
+  theme(legend.position = c(.85, .21),
+        legend.box.background = element_rect(colour = "black")) +
+  ggsave(glue("../figures/practice_phase/auc.png"), width=8, height=4.5)
 ```
 
 # Aggregate performance plot
 
 ## Actual responses
 ```{r}
-plot_responses = df_puzzle %>% 
+df_puzzle %>% 
   filter(subject_id %in% solver_ids,
          phase == 1,
          response_type != 'Target') %>% 
@@ -273,14 +282,14 @@ plot_responses = df_puzzle %>%
        x = "Trial",
        y = "Frequency") +
   guides(fill = guide_legend(title="Response Type")) +
-  theme(legend.position = "bottom")
-
-plot_responses
+  theme(legend.position = c(.86, .805),
+        legend.box.background = element_rect(colour = "black")) +
+  ggsave(glue("../figures/practice_phase/responses.png"), width=8, height=4.5)
 ```
 
 ## P(responses)
 ```{r}
-plot_p_responses = df_p_responses %>% 
+df_p_responses %>% 
   filter(subject_id %in% solver_ids,
          response_type != 'Target') %>% 
   group_by(trial, response_type) %>% 
@@ -293,15 +302,15 @@ plot_p_responses = df_p_responses %>%
        x = "Trial",
        y = "P(Response)") +
   guides(fill = guide_legend(title="Response Type")) +
-  theme(legend.position = "bottom")
-
-plot_p_responses
+  theme(legend.position = c(.86, .805),
+        legend.box.background = element_rect(colour = "black")) +
+  ggsave(glue("../figures/practice_phase/p_responses.png"), width=8, height=4.5)
 ```
 
 ## P(strategy)
 
 ```{r}
-plot_p_strategies = df_p_strategies %>% 
+df_p_strategies %>% 
   filter(subject_id %in% solver_ids) %>% 
   mutate(strategy = recode(strategy,
                            `Uniform Guess` = "UG",
@@ -317,109 +326,40 @@ plot_p_strategies = df_p_strategies %>%
        x = "Trial",
        y = "P(Strategy)") +
   guides(fill = guide_legend(title="Strategy")) +
-  theme(legend.position = "bottom")
-
-plot_p_strategies
+  theme(legend.position = c(.89, .24),
+        legend.box.background = element_rect(colour = "black")) +
+  ggsave(glue("../figures/practice_phase/p_strategies.png"), width=8, height=4.5)
 ```
 
 
-## Phase 1 trial of acquiring HS
+## % of participants predicted to use HS
 
 ```{r}
-get_hs_acquired = function(p) {
-  df = df_p_strategies %>% 
-    filter(strategy == 'Hidden Single',
-           probability >= p) %>% 
-    group_by(subject_id) %>% 
-    summarize(trial = min(trial)) %>% 
-    mutate(confidence = p)
-  return (df)
-}
-
-df = tibble(p = c(.5, .667, .8, .9)) %>% 
-  mutate(temp = map(.x = p,
-                    .f = ~get_hs_acquired(.x))) %>% 
-  unnest()
-
-plot_hs_acquired = df  %>% 
-  mutate(Confidence = as.factor(confidence)) %>% 
-  ggplot(aes(x = trial, color = Confidence)) +
-  geom_line(aes(y = ..y..),
-            stat = 'ecdf') +
-  geom_point(aes(y = ..y..),
-             stat = 'ecdf') +
-  xlim(1, 25) +
-  labs(title = 'P(Strategy) >= Confidence',
-       x = 'trial',
-       y = '% of Participants') +
-  guides(color = guide_legend(title="Threshold")) +
-  theme(legend.position="bottom")
-
-plot_hs_acquired
+df = df_p_strategies %>% 
+  filter(subject_id %in% solver_ids,
+         strategy == 'Hidden Single') %>% 
+  crossing(threshold = c(.5, .667, .8, .9)) %>% 
+  mutate(pred_hs = probability >= threshold) %>% 
+  group_by(trial, threshold) %>% 
+  summarize(p_hs = mean(pred_hs)) %>% 
+  mutate(Threshold = as.factor(threshold))
 
 df %>% 
-  filter(confidence == .8) %>% 
-  tidy_ecdf(trial)
+  filter(threshold == .8)
 ```
 
-
-All aggregate plots in one
 ```{r}
-legend_ab = get_legend(plot_responses)
-legend_c = get_legend(plot_p_strategies)
-legend_d = get_legend(plot_hs_acquired)
-legend_e = get_legend(plot_auc)
-legend_f = get_legend(plot_p_hs)
-plot_a = plot_responses +
-  theme(legend.position = 'None')
-plot_b = plot_p_responses +
-  theme(legend.position = 'None')
-plot_c = plot_p_strategies +
-  theme(legend.position = 'None')
-plot_d = plot_hs_acquired +
-  theme(legend.position = 'None')
-plot_e = plot_auc +
-  theme(legend.position = 'None')
-plot_f = plot_p_hs +
-  theme(legend.position = 'None')
-
-plot_ab = ggdraw() +
-  draw_plot(plot_a, x = 0, y = 0, width = .5, height = 1) +
-  draw_plot(plot_b, x = .5, y = 0, width = .5, height = 1)
-
-plot_ab = ggdraw() +
-  draw_plot(plot_ab, x = 0, y = .08, width = 1, height = .92) +
-  draw_grob(legend_ab, 0, 0, 1, .08)
-
-plot_c = ggdraw() +
-  draw_plot(plot_c, x = 0, y = .08, width = 1, height = .92) +
-  draw_grob(legend_c, 0, 0, 1, .08)
-
-plot_d = ggdraw() +
-  draw_plot(plot_d, x = 0, y = .08, width = 1, height = .922) +
-  draw_grob(legend_d, 0, 0, 1, .08)
-
-plot_e = ggdraw() +
-  draw_plot(plot_e, x = 0, y = .08, width = 1, height = .922) +
-  draw_grob(legend_e, 0, 0, 1, .08)
-
-plot_f = ggdraw() +
-  draw_plot(plot_f, x = 0, y = .08, width = 1, height = .922) +
-  draw_grob(legend_f, 0, 0, 1, .08)
-
-p = ggdraw() +
-  draw_plot(plot_ab, x = 0, y = 0.666, width = 1, height = .334) + 
-  draw_plot(plot_c, x = 0, y = .333, width = .5, height = .333) +
-  draw_plot(plot_d, x = 0.5, y = .333, width = .5, height = .333) +
-  draw_plot(plot_e, x = 0, y = 0, width = .5, height = .333) +
-  draw_plot(plot_f, x = 0.5, y = 0, width = .5, height = .333) +
-  draw_plot_label(label = c("A", "B", "C", "D", "E", "F"),
-                  size = 13,
-                  x = c(0, .5, 0, 0.5, 0, 0.5), y = c(1, 1, .66, .66, .33, .33))
-
-ggsave(glue("../figures/practice_phase_aggregates/hmm_results.png"), plot=p, width=8, height=9)
+df %>% 
+  ggplot(aes(x = trial, y = p_hs, color = Threshold)) +
+  geom_line() +
+  geom_point() +
+  labs(title = TeX("P(successful) $\\geq$ Threshold"),
+       x = 'Trial',
+       y = '% of Participants') +
+  theme(legend.position = c(.88, .245),
+        legend.box.background = element_rect(colour = "black")) +
+  ggsave(glue("../figures/practice_phase/p_hs.png"), width=8, height=4.5)
 ```
-
 
 # Individual plots
 
