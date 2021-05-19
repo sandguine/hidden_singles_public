@@ -247,27 +247,32 @@ create_dur_plot = function(df, brm_savefile) {
 plot.ht.acc = df_puzzles %>% 
   mutate(condition = ifelse(ht, 'Changed', 'Unchanged')) %>% 
   create_acc_plot() +
-  labs(title = "House Type Accuracy")
+  labs(title = "House Type Accuracy") +
+  ggsave(glue("../figures/test_phase/ht_acc.png"), width=6, height=4)
 
 plot.hi.acc = df_puzzles %>% 
   mutate(condition = ifelse(hi, 'Changed', 'Unchanged')) %>% 
   create_acc_plot() +
-  labs(title = "House Index Accuracy")
+  labs(title = "House Index Accuracy") +
+  ggsave(glue("../figures/test_phase/hi_acc.png"), width=6, height=4)
 
 plot.ci.acc = df_puzzles %>% 
   mutate(condition = ifelse(ci, 'Changed', 'Unchanged')) %>% 
   create_acc_plot() +
-  labs(title = "Cell Index Accuracy")
+  labs(title = "Cell Index Accuracy") +
+  ggsave(glue("../figures/test_phase/ci_acc.png"), width=6, height=4)
 
 plot.ds.acc = df_puzzles %>% 
   mutate(condition = ifelse(ds, 'Changed', 'Unchanged')) %>% 
   create_acc_plot() +
-  labs(title = "Digit Set Accuracy")
+  labs(title = "Digit Set Accuracy") +
+  ggsave(glue("../figures/test_phase/ds_acc.png"), width=6, height=4)
 
 plot.gp.acc = df_puzzles %>% 
   mutate(condition = ifelse(gp, 'Changed', 'Unchanged')) %>% 
   create_acc_plot() +
-  labs(title = "Goal Position Accuracy")
+  labs(title = "Goal Position Accuracy") +
+  ggsave(glue("../figures/test_phase/gp_acc.png"), width=6, height=4)
 ```
 
 
@@ -278,31 +283,36 @@ plot.ht.dur = df_puzzles %>%
   filter(correct) %>% 
   mutate(condition = ifelse(ht, 'Changed', 'Unchanged')) %>% 
   create_dur_plot('cache/ht.dur.plot') +
-  labs(title = "House Type Response Time")
+  labs(title = "House Type Response Time") +
+  ggsave(glue("../figures/test_phase/ht_rt.png"), width=6, height=4)
 
 plot.hi.dur = df_puzzles %>% 
   filter(correct) %>% 
   mutate(condition = ifelse(hi, 'Changed', 'Unchanged')) %>% 
   create_dur_plot('cache/hi.dur.plot') +
-  labs(title = "House Index Response Time")
+  labs(title = "House Index Response Time") +
+  ggsave(glue("../figures/test_phase/hi_rt.png"), width=6, height=4)
 
 plot.ci.dur = df_puzzles %>% 
   filter(correct) %>% 
   mutate(condition = ifelse(ci, 'Changed', 'Unchanged')) %>% 
   create_dur_plot('cache/ci.dur.plot') +
-  labs(title = "Cell Index Response Time")
+  labs(title = "Cell Index Response Time") +
+  ggsave(glue("../figures/test_phase/ci_rt.png"), width=6, height=4)
 
 plot.ds.dur = df_puzzles %>% 
   filter(correct) %>% 
   mutate(condition = ifelse(ds, 'Changed', 'Unchanged')) %>% 
   create_dur_plot('cache/ds.dur.plot') +
-  labs(title = "Digit Set Response Time")
+  labs(title = "Digit Set Response Time") +
+  ggsave(glue("../figures/test_phase/ds_rt.png"), width=6, height=4)
 
 plot.gp.dur = df_puzzles %>% 
   filter(correct) %>% 
   mutate(condition = ifelse(gp, 'Changed', 'Unchanged')) %>% 
   create_dur_plot('cache/gp.dur.plot') +
-  labs(title = "Goal Position Response Time")
+  labs(title = "Goal Position Response Time") +
+  ggsave(glue("../figures/test_phase/gp_rt.png"), width=6, height=4)
 ```
 
 ## Plot for manuscript
@@ -324,7 +334,7 @@ p = ggdraw() +
 ggdraw() +
   draw_plot(p, x = 0, y = .05, width = 1, height = .95) +
   draw_grob(legend, 0, 0, 1, .05) +
-  ggsave(glue("../figures/test_phase/ds_ht_results.png"), width=8, height=6)
+  ggsave(glue("../figures/test_phase/ds_ht_results.png"), width=6, height=5.33)
 ```
 
 ## Plot for supplement
@@ -347,7 +357,7 @@ p = ggdraw() +
 ggdraw() +
   draw_plot(p, x = 0, y = .05, width = 1, height = .95) +
   draw_grob(legend, 0, 0, 1, .05) +
-  ggsave(glue("../figures/test_phase/gp_hi_ci_results.png"), width=8, height=9)
+  ggsave(glue("../figures/test_phase/gp_hi_ci_results.png"), width=6, height=8)
 ```
 
 # House Type

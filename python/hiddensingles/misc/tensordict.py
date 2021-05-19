@@ -5,6 +5,8 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 import itertools
+from torch.utils.data import Dataset, DataLoader
+
 
 from . import torch_utils, utils
 
@@ -182,6 +184,38 @@ class TensorDict(Mapping):
         """
         return self.map(lambda t: t.clone())
 
+    def expand_along_dim(self, dim, n):
+        """
+        See torch_utils.expand_along_dim
+        :param dim:
+        :param n:
+        :return:
+        """
+        td = TensorDict()
+        for k, v in self.items():
+            td[k] = torch_utils.expand_along_dim(v, dim, n)
+        return td
+
+    def repeat(self, dim, n, interleave=False):
+        """
+        Returns a TensorDict with all tensors repeated n times along dim dimension.
+        If interleaved, [a b c] -> [a a b b c c].
+        Else, [a b c] -> [a b c a b c].
+        :param dim:
+        :param n:
+        :param interleave:
+        :return:
+        """
+        td = TensorDict()
+        for k, v in self.items():
+            if interleave:
+                v = v.repeat_interleave(n, dim=dim)
+            else:
+                shape = [1] * len(v.shape)
+                shape[dim] = n
+                v = v.repeat(shape)
+            td[k] = v
+        return td
 
     def check_device(self, item):
         """
@@ -342,6 +376,12 @@ class TensorDict(Mapping):
         df = df.rename(dimnames, axis=1)
         return df
 
+    def to_dataset(self):
+        return TDDataset(self)
+
+    def to_dataloader(self, **kwargs):
+        return TDDataLoader(self, **kwargs)
+
 
     ### TENSOR OPERATIONS ###
 
@@ -367,3 +407,37 @@ class TensorDict(Mapping):
     def mean(self, dim):
         return self.map(lambda t: t.mean(dim=dim))
 
+
+class TDDataset(Dataset):
+
+    def __init__(self, tensordict: TensorDict):
+        self.tensordict = tensordict
+
+    def __len__(self):
+        return self.tensordict.batch_shape[0]
+
+    def __getitem__(self, index):
+        return self.tensordict[index]
+
+
+class TDDataLoader(DataLoader):
+
+    def __init__(self, tensordict, batch_size=None, shuffle=True, **kwargs):
+        if batch_size is None:
+            batch_size = tensordict.batch_shape[0]
+        dataset = tensordict.to_dataset()
+        super().__init__(dataset, batch_size=batch_size, shuffle=shuffle, **kwargs)
+
+    def __iter__(self):
+        iterator = super().__iter__()
+        return TDDataLoaderIterator(iterator)
+
+
+class TDDataLoaderIterator:
+
+    def __init__(self, base_dataloader_iterator):
+        self.base_dataloader_iterator = base_dataloader_iterator
+
+    def __next__(self):
+        dict = self.base_dataloader_iterator.__next__()
+        return TensorDict(**dict)
