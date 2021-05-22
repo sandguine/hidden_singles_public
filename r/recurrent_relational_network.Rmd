@@ -26,6 +26,7 @@ rm(list = ls())
 ```{r libraries, message=FALSE}
 library(glue)
 library(zoo)
+library(scales)
 library(tidyverse)
 
 source("functions.R")
@@ -158,7 +159,7 @@ df = df %>%
   filter(is.na(finish_point) | presentations <= finish_point) %>% 
   select(-finish_point)
 
-modeltype = 'DRRN'
+modeltype = 'RRN'
 dataset_type = 'Valid'
 
 df %>% 
@@ -180,8 +181,7 @@ df %>%
                                 `50` = '#D39200',
                                 `25` = '#F8766D')) +
   coord_cartesian(xlim = c(0, 500000)) +
-  labs(title = glue('{modeltype} - {dataset_type}'), 
-       x = 'Pattern Presentations',
+  labs(x = 'Pattern Presentations',
        y = 'Accuracy') +
   guides(color = guide_legend(title="Training\nSet Size"),
          linetype = guide_legend(title="Model")) +
@@ -191,6 +191,9 @@ df %>%
 
 ## Test plot
 ```{r, message=F}
+hues = hue_pal()(4)
+hues = c('gray', hues)
+
 solvers = read_tsv("../data/processed/subject_data.tsv") %>% 
   filter(solver) %>% 
   pull(subject_id)
@@ -229,22 +232,25 @@ df %>%
                 c('model', 'condition'),
                 seed=0) %>% 
   ggplot(aes(x = model,
-             fill = condition,
+             color = condition,
              group = condition)) +
-  geom_bar(aes(y = mean),
+  geom_point(aes(y = mean),
            stat = 'identity',
-           size = 1.5,
-           position = position_dodge(.9)) +
+           size = 3,
+           position = position_dodge(.6)) +
   geom_linerange(aes(ymin = hdci_l,
                      ymax = hdci_h),
-                 position = position_dodge2(.9)) +
-  coord_cartesian(ylim = c(0, 1)) + 
-  labs(title = 'Test Set Accuracy',
-       x = "Model",
+                 position = position_dodge2(.6)) +
+  coord_cartesian(ylim = c(-.05, 1.05)) + 
+  scale_y_continuous(breaks = c(0, .25, .5, .75, 1)) +
+  scale_color_manual(values=hues) +
+  labs(x = "Model",
        y = "Accuracy") +
-  guides(fill = guide_legend(title=element_blank())) +
+  guides(color = guide_legend(title=element_blank())) +
   theme(legend.position = 'bottom',
         text = element_text(size = 15))  +
   ggsave('../figures/rrn/test_accuracy.png', width = 6, height = 4)
+
+
 ```
 

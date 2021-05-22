@@ -52,6 +52,8 @@ df.qratings2 = read_tsv("../data/qratings/rater2.tsv", quote = "") %>%
 ```
 
 ```{r wrangle, echo=F}
+categories = c('V1', 'V2', 'V3', 'U1', 'U2', 'I1', 'I2', 'I3', 'M', 'X')
+
 df.qratings = df.qratings1 %>% 
   bind_rows(df.qratings2) %>% 
   select(sid_hash,
@@ -63,6 +65,7 @@ df.qratings = df.qratings1 %>%
          basis = `Basis for Choice`,
          basis2 = `Second Choice`,
          notes = `Additional Notes`) %>% 
+  replace_na(list(basis2 = 'K')) %>% 
   mutate(correct_eval = correct_eval == 'Correct',
          correct_actual = correct_actual == 'Correct',
          pd = ifelse(pd == 'Vague or uncertain', 'Uncertain', pd),
@@ -74,10 +77,29 @@ df.qratings = df.qratings1 %>%
          aoe = aoe == 'Yes with explanation',
          basis = substring(basis, 0, 1),
          basis2 = substring(basis2, 0, 1),
-         valid_basis = basis %in% c("A", "B", "C")) %>% 
-  replace_na(list(basis2 = "K")) %>% 
-  mutate(basis = factor(basis),
-         basis2 = factor(basis2))
+         basis = case_when(basis == 'A' ~ 'V1',
+                           basis == 'B' ~ 'V2',
+                           basis == 'C' ~ 'V3',
+                           basis == 'D' ~ 'U1',
+                           basis == 'E' ~ 'I1',
+                           basis == 'F' ~ 'I2',
+                           basis == 'G' ~ 'I3',
+                           basis == 'H' ~ 'U2',
+                           basis == 'I' ~ 'M',
+                           TRUE ~ 'X'),
+         basis2 = case_when(basis2 == 'A' ~ 'V1',
+                            basis2 == 'B' ~ 'V2',
+                            basis2 == 'C' ~ 'V3',
+                            basis2 == 'D' ~ 'U1',
+                            basis2 == 'E' ~ 'I1',
+                            basis2 == 'F' ~ 'I2',
+                            basis2 == 'G' ~ 'I3',
+                            basis2 == 'H' ~ 'U2',
+                            basis2 == 'I' ~ 'M',
+                            TRUE ~ 'X'),
+         basis = factor(basis, categories),
+         basis2 = factor(basis2, categories),
+         valid_basis = basis %in% c("V1", "V2", "V3"))
 
 df.data = df.subject_data %>% 
   right_join(df.qratings, by = "sid_hash") %>% 
@@ -272,6 +294,39 @@ df.data %>%
 
 ### Basis for Choice
 
+First choice only
+```{r}
+df.data %>% 
+  select(subject_id, rater, basis) %>% 
+  mutate(basis = as.character(basis)) %>% 
+  pivot_wider(names_from = rater,
+              values_from = basis,
+              names_glue = "{rater}_{.value}") %>% 
+  mutate(agree = rater1_basis == rater2_basis) %>% 
+  select(subject_id, agree, everything()) %>% 
+  summarize(agree = mean(agree)) %>% 
+  knitr::kable()
+```
+
+
+First choice only for those that solved correctly at valid vs invalid
+```{r}
+df.data %>% 
+  filter(correct_actual) %>% 
+  #        solver == 'Persistent Solver') %>% 
+  select(subject_id, rater, basis) %>% 
+  # mutate(basis = as.character(basis)) %>%
+  mutate(basis = as.character(basis) %>%
+           substring(0, 1)) %>%
+  pivot_wider(names_from = rater,
+              values_from = basis,
+              names_glue = "{rater}_{.value}") %>% 
+  mutate(agree = rater1_basis == rater2_basis) %>% 
+  select(subject_id, agree, everything()) %>% 
+  summarize(agree = mean(agree)) %>% 
+  knitr::kable()
+```
+
 Rule: Either both first bases match or a first basis match with second basis.
 Since our focus on this analysis is just first basis, if only second bases match,
 we should just count them as disagreements.
@@ -321,6 +376,36 @@ df.data %>%
   ggsave(glue("../figures/questionnaire/q_basis.png"), width=6, height=4)
 ```
 
+```{r basis_tile, echo=F}
+# Visualizing only first bases.
+# Correct responders only
+
+df.data %>% 
+  filter(correct_actual) %>% 
+  select(subject_id, solver, rater, basis) %>% 
+  pivot_wider(names_from = rater, values_from = basis) %>% 
+  group_by(rater1, rater2, solver) %>% 
+  summarize(n = n()) %>% 
+  complete(rater1, rater2, fill = list(n = 0)) %>% 
+  mutate(label = ifelse(n > 0, as.character(n), "")) %>% 
+  drop_na(solver) %>% 
+  ggplot(aes(x = rater1, y = fct_rev(rater2), fill = n)) +
+  geom_tile() +
+  scale_fill_gradient(low = 'white',
+                      high = 'steelblue',
+                      na.value = 'white') +
+  geom_text(aes(label = label)) +
+  scale_x_discrete(position = "top") + 
+  facet_wrap(vars(solver)) +
+  theme(legend.position = "bottom",
+        text = element_text(size = 15)) +
+  labs(title = 'Basis for Choice Classifications (Correct Only)',
+       x = 'Rater 1',
+       y = 'Rater 2') +
+  guides(fill = guide_colorbar(title = "Number of Subjects")) +
+  ggsave(glue("../figures/questionnaire/q_basis_correct.png"), width=6, height=4)
+```
+
 ## Basis for Choice Group Differences
 
 Difference in valid_basis distribution
@@ -340,36 +425,40 @@ df.data %>%
   filter(correct_actual) %>% 
   get_counts_with_zeros(c('solver', 'basis')) %>% 
   spread(basis, n) %>% 
-  select(-solver) %>% 
+  select(-c(solver, X)) %>% 
   chisq.test()
 ```
 
-## Bar Plot
+## Basis Plot
 
 ```{r basis_bar, echo=F}
 # Bar plot
 df = df.data %>% 
-  filter(correct_actual)
+  filter(correct_actual) %>% 
+  select(subject_id, rater, solver, basis)
 
 df.sum.stats = get_dirichlet_hdci(df, c('solver', 'basis'), 100000) %>% 
-  mutate(category = as.character(basis))
+  mutate(category = factor(basis, categories))
 
-df %>% 
-  select(subject_id, solver, rater, basis) %>%
-  mutate(basis = as.character(basis)) %>% 
-  crossing(category = LETTERS[1:9]) %>% 
-  mutate(selected = as.numeric(category == basis)) %>% 
-  ggplot(aes(x = category, fill = solver, group = solver)) +
+df %>%
+  crossing(category = categories) %>% 
+  mutate(selected = as.numeric(category == basis),
+         category = factor(category, categories, ordered = TRUE)) %>% 
+  ggplot(aes(x = category, color = solver, group = solver)) +
   stat_summary(aes(y = selected),
                fun = "mean",
-               geom = "bar",
-               position = position_dodge2(preserve = "single")) +
+               geom = "point",
+               size = 2,
+               position = position_dodge2(.5)) +
   geom_linerange(aes(ymin = hdci_l,
                      ymax = hdci_h),
                  data = df.sum.stats,
-                 position = position_dodge2(.9)) +
+                 position = position_dodge2(.5)) +
+  coord_cartesian(ylim = c(-.02, .52)) + 
+  scale_y_continuous(breaks = c(0, .25, .5)) +
   theme(legend.title = element_blank(),
-        legend.position = "bottom",
+        legend.box.background = element_rect(colour = "black"),
+        legend.position = c(.81, .85),
         text = element_text(size = 15)) +
   labs(x = "Basis",
        y = "% of Participants in Group") +
@@ -455,7 +544,7 @@ df.sum.stats = df.edu %>%
   mutate(hdci_h = case_when(n < 2 ~ hdci_l,
                             TRUE ~ hdci_h)) %>% 
   filter(n > 0)
-  
+
 
 colors = hue_pal()(3)
 
@@ -463,14 +552,10 @@ df.edu %>%
   ggplot(aes(x = edu_level,
              color = alg_geom,
              fill = alg_geom)) +
-  geom_violin(aes(y = accuracy),
-              position = 'identity',
-              color = NA,
-              alpha = .2) +
   geom_point(aes(y = accuracy),
              position = position_jitterdodge(dodge.width = .3,
                                              jitter.width = .3),
-             alpha = .4) +
+             alpha = .5) +
   geom_linerange(aes(ymin = hdci_l,
                      ymax = hdci_h),
                  data = df.sum.stats,
@@ -491,7 +576,7 @@ df.edu %>%
        fill = "Algebra & Geometry") +
   theme(legend.position = "bottom",
         text = element_text(size = 15)) +
-  ggsave(glue("../figures/questionnaire/education.png"), width=7, height=4)
+  ggsave(glue("../figures/questionnaire/education.png"), width=7, height=5)
 ```
 
 ## Regressions
